@@ -166,6 +166,14 @@ val pi_sort: typ -> typ -> typ
 
 
 
+val split_application: t -> t * (t * Application_info.t) list
+(**
+    [split_application t]
+*)
+
+
+
+
 val map: (int -> int) -> t -> t
 (**
     [map f t]

@@ -445,6 +445,24 @@ let pi_sort (arg: typ) (res: typ): typ =
 
 
 
+
+
+let split_application
+    (t: t)
+    : t * (t * Application_info.t) list
+=
+    let rec split t args =
+        match t with
+        | Appl (f, a, info) ->
+            split f ((a,info) :: args)
+        | _ ->
+            t, args
+    in
+    split t []
+
+
+
+
 let map (f: int -> int) (t: t): t =
     let rec map nb t =
         match t with
