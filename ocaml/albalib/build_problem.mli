@@ -25,6 +25,7 @@ type description =
     | Missing_inductive_type
     | No_inductive_type
     | Wrong_type_constructed
+    | Not_positive
     | Not_yet_implemented of string
 
 

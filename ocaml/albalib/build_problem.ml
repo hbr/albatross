@@ -25,6 +25,7 @@ type description =
     | Missing_inductive_type
     | No_inductive_type
     | Wrong_type_constructed
+    | Not_positive
     | Not_yet_implemented of string
 
 
@@ -250,6 +251,13 @@ struct
             <+> wrap_words
                 "where 'I' is the name of the inductive type, 'p1 p2 ...' \
                 are the parameters and 'i1 i2 ...' are the indices."
+            <+> cut
+
+        | Not_positive ->
+            wrap_words
+                "The constructor does not satisfy the positivity condition. \
+                I.e. one of its argument types is a function type which uses \
+                an object of some of the inductive types as an argument."
             <+> cut
 
         | Not_yet_implemented str ->

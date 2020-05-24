@@ -237,7 +237,12 @@ val to_index: int -> t -> t
 val to_level: int -> t -> t
 
 
+val has: (int -> bool) -> t -> bool
+(** [has p term] does the term have a variable satisfying [p]¿ *)
+
+
 val has_variable: int -> t -> bool
+
 
 
 (** Monadic functions *)

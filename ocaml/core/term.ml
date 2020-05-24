@@ -698,18 +698,21 @@ end
 
 
 
-
-let has_variable (i: int) (term: t): bool =
+let has (p: int -> bool) (term: t): bool =
     let module Mon = Monadic (Option) in
     None
     = Mon.fold_free
         (fun j () ->
-            if i = j then
+            if p j then
                 None
             else
                 Some ())
         term
         ()
+
+
+let has_variable (i: int) (term: t): bool =
+    has (fun j -> i = j) term
 
 
 

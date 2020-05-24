@@ -244,6 +244,44 @@ let push_types
 
 
 
+let check_positivity
+    (cnt0: int)
+    (headers: Inductive.Header.t array)
+    (name: string Located.t)
+    ((info, typ): Term.Pi_info.t * Term.typ)
+    (c: Context.t)
+    : Context.t result2
+=
+    let open Term in
+    let ntypes  = Array.length headers
+    in
+    let rec check typ c =
+        match Algo.key_normal typ (Context.gamma c) with
+        | Pi (arg, res, info) ->
+            let is_inductive idx =
+                let level = Context.level_of_index idx c in
+                cnt0 <= level && level < cnt0 + ntypes
+            in
+            if Term.has is_inductive arg then
+                Error (
+                    Located.range name,
+                    Build_problem.Not_positive
+                )
+            else
+                check
+                    res
+                    (Context.push_local (Pi_info.name info) arg c)
+        | _ ->
+            Ok c
+    in
+    check typ c
+    >>= fun _ ->
+    Ok (Context.push_local (Pi_info.name info) typ c)
+
+
+
+
+
 let check_constructor_type
     (i: int)
     (params: Inductive.params)
@@ -263,8 +301,13 @@ let check_constructor_type
     in
     List_monadic.(
         fold_left
-            (fun _ _ ->
-                assert false)
+            (fun arg c1 ->
+                check_positivity
+                    cnt0
+                    headers
+                    name
+                    arg
+                    c1)
             args
             c
     )

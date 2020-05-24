@@ -8,6 +8,7 @@ val count: t -> int
 val gamma: t -> Gamma.t
 val name_map: t -> Name_map.t
 val index_of_level: int -> t -> int
+val level_of_index: int -> t -> int
 
 
 val empty: t

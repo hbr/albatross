@@ -32,6 +32,9 @@ let name_map (c: t): Name_map.t =
 let index_of_level (level: int) (c: t): int =
     Gamma.index_of_level level c.gamma
 
+let level_of_index = index_of_level
+
+
 
 let standard (): t =
     let gamma = Gamma.standard () in
