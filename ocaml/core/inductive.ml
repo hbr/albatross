@@ -59,7 +59,7 @@ struct
         let inductive_variable =
             Variable (bruijn_convert i (ntypes + nparams + nargs))
         and param_variable k =
-            Variable (bruijn_convert k nparams)
+            Variable (bruijn_convert k (nparams + nargs))
         in
         f = inductive_variable
         &&
