@@ -25,6 +25,7 @@ type description =
     | Missing_inductive_type
     | No_inductive_type
     | Wrong_type_constructed
+    | Negative
     | Not_positive
     | Not_yet_implemented of string
 
@@ -253,11 +254,19 @@ struct
                 are the parameters and 'i1 i2 ...' are the indices."
             <+> cut
 
-        | Not_positive ->
+        | Negative ->
             wrap_words
                 "The constructor does not satisfy the positivity condition. \
-                I.e. one of its argument types is a function type which uses \
-                an object of some of the inductive types as an argument."
+                One of its argument types is a function type which uses \
+                an object of some of the inductive types as an argument i.e. \
+                one of the inductive types appears in a negative position."
+            <+> cut
+
+        | Not_positive ->
+            wrap_words
+                "The constructor does not satify the positivity condition. \
+                One of its argument types used an inductive type of the family \
+                in a positive position, but not in the correct format."
             <+> cut
 
         | Not_yet_implemented str ->

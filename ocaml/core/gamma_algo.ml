@@ -49,7 +49,6 @@ struct
 
     let key_split
           (t: Term.t)
-          (args: (Term.t * Term.Application_info.t) list)
           (c: t)
         : Term.t * (Term.t * Term.Application_info.t) list
       =
@@ -85,13 +84,13 @@ struct
         | _ ->
            t, args
       in
-      split t args
+      split t []
 
 
 
 
     let key_normal (t: Term.t) (c: t): Term.t =
-        let key, args = key_split t [] c in
+        let key, args = key_split t c in
         List.fold_left
             (fun res (arg, mode) ->
               Term.Appl (res, arg, mode))
@@ -137,7 +136,7 @@ struct
             | _ ->
                 key
         in
-        let key, args = key_split term [] c in
+        let key, args = key_split term c in
         List.fold_left
             (fun res (arg, mode) ->
                 Term.Appl (res, normalize arg c, mode))

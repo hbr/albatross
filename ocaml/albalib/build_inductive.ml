@@ -243,36 +243,119 @@ let push_types
 
 
 
+let positive_occurrences
+    (p: int -> bool)
+    (typ: Term.typ)
+    (gamma: Gamma.t)
+    : (int * int) list option
+=
+    let open Option in
+    let module Pair_set =
+        Set.Make (
+            struct
+                type t = int * int
+                let compare (i1,j1) (i2,j2) =
+                    let cmp = Stdlib.compare i1 i2 in
+                    if cmp = 0 then
+                        Stdlib.compare j1 j2
+                    else
+                        cmp
+            end
+        )
+    in
+    let rec collect typ set =
+        let f, args = Algo.key_split typ gamma in
+        match f with
+        | Variable i ->
+            let level = Gamma.level_of_index i gamma in
+            if p level then
+                if List.exists
+                    (fun (arg, _) ->
+                        Gamma.level_has p arg gamma)
+                    args
+                then
+                    None
+                else
+                    Some set
+            else
+                (* check indirect occurrences in args *)
+                let module LMon = List.Monadic (Option) in
+                LMon.foldi_left
+                        (fun k (arg,_) set ->
+                            collect arg (Pair_set.add (level,k) set))
+                        args
+                        set
+
+        | _ ->
+            if Gamma.level_has p f gamma then
+                None
+            else
+                Some set
+    in
+    map
+        Pair_set.elements
+        (collect typ Pair_set.empty)
+
+
+
+
+let check_positive
+    (p: int -> bool)
+    (name: string Located.t)
+    (typ: Term.typ)
+    (c: Context.t)
+    : unit result2
+=
+    (* [typ] is the final type of an argument of the constructor with name
+    [name] of the inductive family.
+
+    An inductive [I] type of the family either
+
+    - does not appear
+    - appears as [I a0 a1 ...] where I does not appear in [a0 a1 ...]
+        - either immediately
+        - or indirectly as I1 ... (I a0 a1 ...]) ...
+    *)
+    match positive_occurrences p typ (Context.gamma c) with
+    | None ->
+        Error (
+            Located.range name,
+            Build_problem.Not_positive
+        )
+    | Some [] ->
+        Ok ()
+    | Some _ ->
+        assert false
+
+
 
 let check_positivity
-    (cnt0: int)
-    (headers: Inductive.Header.t array)
+    (is_inductive: int -> bool)
     (name: string Located.t)
     ((info, typ): Term.Pi_info.t * Term.typ)
     (c: Context.t)
     : Context.t result2
 =
+    (* An inductive type must not appear in a negative position of the argument
+    type [typ]. It is allowed in a positive position. But in a positive position
+    it has to be an inductive type either directly or nested.
+    *)
     let open Term in
-    let ntypes  = Array.length headers
-    in
     let rec check typ c =
         match Algo.key_normal typ (Context.gamma c) with
         | Pi (arg, res, info) ->
-            let is_inductive idx =
-                let level = Context.level_of_index idx c in
-                cnt0 <= level && level < cnt0 + ntypes
-            in
-            if Term.has is_inductive arg then
+            if Gamma.level_has is_inductive arg (Context.gamma c)
+            then
                 Error (
                     Located.range name,
-                    Build_problem.Not_positive
+                    Build_problem.Negative
                 )
             else
                 check
                     res
                     (Context.push_local (Pi_info.name info) arg c)
         | _ ->
-            Ok c
+            check_positive is_inductive name typ c
     in
     check typ c
     >>= fun _ ->
@@ -296,6 +379,9 @@ let check_constructor_type
     in
     let cnt0 = Context.count c - nparams - ntypes in
     assert (0 <= cnt0);
+    let is_inductive level =
+        cnt0 <= level && level < cnt0 + ntypes
+    in
     let args, res =
         Algo.split_type typ (Context.gamma c)
     in
@@ -303,8 +389,7 @@ let check_constructor_type
         fold_left
             (fun arg c1 ->
                 check_positivity
-                    cnt0
-                    headers
+                    is_inductive
                     name
                     arg
                     c1)
@@ -321,11 +406,12 @@ let check_constructor_type
             res
     then
         Ok (Inductive.Constructor.make (Located.value name) typ)
-    else
+    else(
         Error (
             Located.range name,
             Build_problem.Wrong_type_constructed
         )
+    )
 
 
 

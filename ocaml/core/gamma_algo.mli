@@ -121,6 +121,12 @@ sig
 
 
 
+    val key_split:
+        Term.t
+        -> Gamma.t
+        -> Term.t * (Term.t * Term.Application_info.t) list
+
+
 
     val key_normal: Term.t -> Gamma.t -> Term.t
     (**
