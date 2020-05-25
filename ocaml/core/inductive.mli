@@ -57,3 +57,15 @@ end
 type t
 
 val make: params -> Type.t array -> t
+
+val count_types: t -> int
+
+val count_params: t -> int
+
+val parameters: t -> params
+
+val ith_type: int -> t -> string * Term.typ
+
+val count_constructors: int -> t -> int
+
+val constructor: int -> int -> t -> string * Term.typ

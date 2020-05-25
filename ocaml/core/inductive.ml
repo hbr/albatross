@@ -109,6 +109,9 @@ struct
 
     let make name typ =
         {name; typ}
+
+    let get co =
+        co.name, co.typ
 end
 
 
@@ -130,10 +133,54 @@ end (* Type *)
 
 
 type t = {
+    n_up: int;
+
     params: params;
 
     types: Type.t array;
 }
 
+
 let make params types =
-    {params; types}
+    {n_up = 0; params; types}
+
+
+let count_types (ind: t): int =
+    Array.length ind.types
+
+
+let count_params (ind: t): int =
+    Array.length ind.params
+
+
+let parameters (ind: t): params =
+    let n = ind.n_up + count_types ind
+    in
+    Array.map (fun (name, typ) -> name, Term.up n typ) ind.params
+
+
+let ith_type (i: int) (ind: t): string * Term.typ =
+    assert (i < count_types ind);
+    let header = ind.types.(i).header
+    in
+    Header.name header
+    ,
+    Term.up
+        ind.n_up
+        (Header.kind ind.params header)
+
+
+let count_constructors (i: int) (ind: t): int =
+    assert (i < count_types ind);
+    Array.length ind.types.(i).constructors
+
+
+
+let constructor (i: int) (j: int) (ind: t): string * Term.typ =
+    assert (i < count_types ind);
+    assert (j < count_constructors i ind);
+    let name, typ =
+        Constructor.get ind.types.(i).constructors.(j)
+    in
+    name,
+    Term.up ind.n_up typ
