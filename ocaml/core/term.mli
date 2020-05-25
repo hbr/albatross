@@ -238,7 +238,11 @@ val to_level: int -> t -> t
 
 
 val has: (int -> bool) -> t -> bool
-(** [has p term] does the term have a variable satisfying [p]¿ *)
+(** [has p term] does the term have a free variable satisfying [p]? *)
+
+val forall: (int -> bool) -> t -> bool
+(** [forall p term] do all free variables in [term] satisfy [p]? *)
+
 
 
 val has_variable: int -> t -> bool

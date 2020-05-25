@@ -711,6 +711,12 @@ let has (p: int -> bool) (term: t): bool =
         ()
 
 
+
+let forall (p: int -> bool) (term: t): bool =
+    not (has (fun i -> not (p i)) term)
+
+
+
 let has_variable (i: int) (term: t): bool =
     has (fun j -> i = j) term
 
