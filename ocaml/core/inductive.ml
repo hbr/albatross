@@ -39,6 +39,30 @@ struct
             header.kind
 
 
+    let default_type
+        (i:int) (params: params) (headers: t array)
+        : Term.typ
+    =
+        (* Valid in a context with the types and the parameters. *)
+        let nparams = Array.length params
+        and ntypes  = Array.length headers
+        in
+        let rec make k typ =
+            if k = nparams then
+                typ
+            else
+                make
+                    (k + 1)
+                    Term.(
+                        application
+                            typ
+                            (Variable (bruijn_convert k nparams))
+                    )
+        in
+        make 0 Term.(Variable (bruijn_convert i ntypes + nparams))
+
+
+
     let is_well_constructed
         (i: int)
         (params: params)
@@ -103,27 +127,6 @@ struct
 end (* Type *)
 
 
-let default_type
-    (i:int) (params: params) (headers: Header.t array)
-    : Term.typ
-=
-    (* Valid in a context with the types and the parameters. *)
-    let nparams = Array.length params
-    and ntypes  = Array.length headers
-    in
-    let rec make k typ =
-        if k = nparams then
-            typ
-        else
-            make
-                (k + 1)
-                Term.(
-                    application
-                        typ
-                        (Variable (bruijn_convert k nparams))
-                )
-    in
-    make 0 Term.(Variable (bruijn_convert i ntypes + nparams))
 
 
 type t = {

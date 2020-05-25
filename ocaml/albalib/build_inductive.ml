@@ -325,7 +325,7 @@ let check_positive
     | Some [] ->
         Ok ()
     | Some _ ->
-        assert false
+        assert false (* nyi: nested positivity *)
 
 
 
@@ -459,7 +459,7 @@ let one_constructor
                     Build_problem.Missing_inductive_type
                 )
             else
-                Ok (Inductive.default_type i params headers)
+                Ok (Inductive.Header.default_type i params headers)
 
         | Some typ ->
             Build_expression.build_named_type name typ c1
