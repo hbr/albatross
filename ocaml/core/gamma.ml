@@ -47,6 +47,18 @@ let level_of_index (i:int) (c:t): int =
   bruijn_convert i (count c)
 
 
+let level_forall (p: int -> bool) (term: Term.t) (c: t): bool =
+    Term.forall
+        (fun level -> p (index_of_level level c))
+        term
+
+
+let level_has (p: int -> bool) (term: Term.t) (c: t): bool =
+    Term.has
+        (fun level -> p (index_of_level level c))
+        term
+
+
 
 let entry (level: int) (c: t): entry =
   assert (level < count c);

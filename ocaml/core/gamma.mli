@@ -26,6 +26,8 @@ val index_of_level: int -> t -> int
 
 val level_of_index: int -> t -> int
 
+val level_forall: (int -> bool) -> Term.t -> t -> bool
+val level_has:    (int -> bool) -> Term.t -> t -> bool
 
 val entry: int -> t -> entry
 (** [entry level c] *)
