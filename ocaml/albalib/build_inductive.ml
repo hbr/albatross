@@ -60,6 +60,7 @@ let class_header
     *)
     assert (i < Array.length inds);
     let (name, (params, kind_exp)), _ = inds.(i) in
+    Printf.printf "analyze header of %s\n" (Located.value name);
     List_monadic.(
         fold_left
             (fun (name, param_typ) (lst,c1) ->
@@ -530,7 +531,7 @@ let constructors
         (0, [])
     >>=
     fun (_, types) ->
-    Ok Inductive.(make params (Array.of_list types))
+    Ok Inductive.(make params (Array.of_list (List.rev types)))
 
 
 
