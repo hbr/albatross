@@ -26,6 +26,8 @@ struct
             && not (Operator.is_keyword_operator name)
         then
             string name
+        else if name.[0] = '[' then
+            string name
         else
             char '(' <+> string name <+> char ')'
 
@@ -101,15 +103,9 @@ struct
         let name, typ = Inductive.ith_type i ind
         and nparams   = Inductive.count_params ind
         in
-        string "class"
-        <+> group space
-        <+> group (
-                nest 4 (
-                    print_name name
-                    <+> space
-                    <+> print_kind nparams typ c0
-            )
-        )
+        print_name name
+        <+> space
+        <+> print_kind nparams typ c0
 
 
     let print_constructors (i: int) (ind: Inductive.t) (c1: Gamma.t): P.t =
@@ -150,9 +146,11 @@ struct
                         and cons   = print_constructors i ind c1
                         in
                         group (
-                            header
-                            <+> group space <+> string ":=" <+> group space
-                            <+> group (nest 4 cons)
+                            string "class"
+                            <+> nest 4 (group space <+> group header)
+                            <+> group space
+                            <+> string ":="
+                            <+> nest 4 (space <+> group cons)
                         )
                     in
                     print i (cls :: lst)
@@ -189,7 +187,7 @@ struct
         let module PP = Pretty_printer.Pretty (String_printer) in
         let module P  = Make (Gamma) (PP) in
         String_printer.run (
-            (PP.run 0 70 70 (P.print ind c))
+            (PP.run 0 70 45 (P.print ind c))
         )
 end
 
