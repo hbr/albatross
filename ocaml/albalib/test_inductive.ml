@@ -200,7 +200,6 @@ let%test _ =
         false
 
 
-(*
 let%test _ =
     let src1 = "class I1 A := co1: (A -> A) -> I1 A"
     and src2 = "class I := co : I1 I -> I"
@@ -218,4 +217,3 @@ let%test _ =
             true
         | _ ->
             false
-*)

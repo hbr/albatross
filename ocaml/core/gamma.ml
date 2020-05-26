@@ -5,6 +5,7 @@ module Pi_info = Term.Pi_info
 
 module Lambda_info = Term.Lambda_info
 
+module Sequence = Segmented_array
 
 
 type definition =
@@ -13,6 +14,8 @@ type definition =
   | Builtin_type of string
   | Builtin of string * Term.Value.t
   | Definition of Term.t
+  | Inductive_type of int * int
+  | Constructor of int * int * int
 
 
 type entry = {
@@ -23,8 +26,17 @@ type entry = {
 
 
 type t = {
-        entries: entry Segmented_array.t;
+        entries: entry Sequence.t;
+        inductives: (int * Inductive.t) Sequence.t;
 }
+
+
+let empty: t =
+    {
+        entries = Sequence.empty;
+        inductives = Sequence.empty;
+    }
+
 
 
 let bruijn_convert (i:int) (n:int): int =
@@ -33,8 +45,11 @@ let bruijn_convert (i:int) (n:int): int =
 
 
 let count (c:t): int =
-  Segmented_array.length c.entries
+    Sequence.length c.entries
 
+
+let count_inductive (c: t): int =
+    Sequence.length c.inductives
 
 
 let is_valid_index (i:int) (c:t): bool =
@@ -64,7 +79,7 @@ let level_has (p: int -> bool) (term: Term.t) (c: t): bool =
 
 let entry (level: int) (c: t): entry =
   assert (level < count c);
-  Segmented_array.elem level c.entries
+  Sequence.elem level c.entries
 
 
 let raw_type_at_level (i:int) (c:t): Term.typ =
@@ -91,17 +106,10 @@ let name_of_index (i: int) (gamma: t): string =
 
 
 
-let empty: t =
-    {
-        entries = Segmented_array.empty;
-    }
-
-
-
 let push (name: string) (typ: Term.typ) (definition: definition) (c: t): t =
-    {
+    {c with
         entries =
-            Segmented_array.push
+            Sequence.push
                 {name; typ; definition}
                 c.entries;
     }
@@ -116,6 +124,8 @@ let add_definition
     : t
 =
     push name typ (Definition def) c
+
+
 
 
 
@@ -148,8 +158,50 @@ let add_builtin_type (descr: string) (name: string) (typ: Term.typ) (c: t): t =
 
 
 
-let add_inductive (_: Inductive.t) (_: t): t =
-    assert false
+let add_inductive (ind: Inductive.t) (c: t): t =
+    let cnti0 = count_inductive c
+    and cnt0  = count c
+    and ntypes = Inductive.count_types ind
+    in
+    let open Common.Interval in
+    let c1 =
+        fold
+            c
+            (fun i ->
+                let name, typ = Inductive.ith_type i ind in
+                push
+                    name
+                    (Term.up i typ)
+                    (Inductive_type (cnti0, i))
+            )
+            0 ntypes
+    in
+    let c2 =
+        fold
+            c1
+            (fun i c ->
+                let nprevious =
+                    Inductive.count_previous_constructors i ind
+                in
+                fold
+                    c
+                    (fun j ->
+                        let name, typ =
+                            Inductive.constructor i j ind
+                        in
+                        push
+                            name
+                            (Term.up (nprevious + j) typ)
+                            (Constructor (cnti0, i, j))
+                    )
+                    0 (Inductive.count_constructors i ind)
+            )
+            0 ntypes
+    in
+    { c2 with
+        inductives =
+            Sequence.push (cnt0, ind) c.inductives;
+    }
 
 
 
@@ -450,6 +502,9 @@ let compute (t:Term.t) (c:t): Term.t =
             | Definition def ->
                Term.up (count c - level) def,
                steps + 1
+
+            | Inductive_type _ | Constructor _ ->
+                term, steps
         )
 
     | Typed (e, _ ) ->

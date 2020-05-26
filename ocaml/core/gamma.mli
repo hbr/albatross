@@ -4,6 +4,8 @@ type definition =
   | Builtin_type of string
   | Builtin of string * Term.Value.t
   | Definition of Term.t
+  | Inductive_type of int * int
+  | Constructor of int * int * int
 
 
 type entry = {

@@ -212,6 +212,7 @@ let class_headers
 
 
 let push_params
+    (ntypes: int)
     (params: Inductive.params)
     (context: Context.t)
     : Context.t
@@ -220,7 +221,7 @@ let push_params
         (fun context (name,typ) ->
             Context.push_local
                 name
-                typ
+                (Term.up ntypes typ)
                 context)
         context
         params
@@ -526,7 +527,7 @@ let constructors
     let context1 =
         push_types params headers context
         |>
-        push_params params
+        push_params (Array.length headers) params
     in
     (* list of constructor sets with corresponding header a number of previous
     constructors. *)

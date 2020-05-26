@@ -3,7 +3,16 @@
 open Fmlib
 
 
-type params = (string * Term.typ) array
+type params = (string * Term.typ) array (* Valid in the initial context. *)
+
+
+let push_params (n: int) (params: params) (res: Term.typ): Term.typ =
+    Array.fold_right
+        (fun (name, typ) res ->
+            Term.(Pi (up n typ, res, Pi_info.typed name)))
+        params
+        res
+
 
 
 module Header =
@@ -32,11 +41,7 @@ struct
 
 
     let kind (params: params) (header: t): Term.typ =
-        Array.fold_right
-            (fun (name, typ) res ->
-                Term.(Pi (typ, res, Pi_info.typed name)))
-            params
-            header.kind
+        push_params 0 params header.kind
 
 
     let default_type
@@ -176,6 +181,12 @@ let count_constructors (i: int) (ind: t): int =
 
 
 
+let count_previous_constructors (i: int) (ind: t): int =
+    assert (i < count_types ind);
+    ind.types.(i).nprevious
+
+
+
 let raw_constructor (i: int) (j: int) (ind: t): string * Term.typ =
     assert (i < count_types ind);
     assert (j < count_constructors i ind);
@@ -184,3 +195,19 @@ let raw_constructor (i: int) (j: int) (ind: t): string * Term.typ =
     in
     name,
     Term.up ind.n_up typ
+
+
+
+let constructor (i: int) (j: int) (ind: t): string * Term.typ =
+    let ntypes = count_types ind
+    in
+    assert (i < ntypes);
+    assert (j < count_constructors i ind);
+    let name, typ =
+        Constructor.get ind.types.(i).constructors.(j)
+    in
+    name,
+    push_params
+        (ind.n_up + ntypes)
+        ind.params
+        (Term.up ind.n_up typ)
