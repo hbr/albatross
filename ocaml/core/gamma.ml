@@ -22,7 +22,9 @@ type entry = {
   }
 
 
-type t = entry Segmented_array.t
+type t = {
+        entries: entry Segmented_array.t;
+}
 
 
 let bruijn_convert (i:int) (n:int): int =
@@ -31,7 +33,7 @@ let bruijn_convert (i:int) (n:int): int =
 
 
 let count (c:t): int =
-  Segmented_array.length c
+  Segmented_array.length c.entries
 
 
 
@@ -62,7 +64,7 @@ let level_has (p: int -> bool) (term: Term.t) (c: t): bool =
 
 let entry (level: int) (c: t): entry =
   assert (level < count c);
-  Segmented_array.elem level c
+  Segmented_array.elem level c.entries
 
 
 let raw_type_at_level (i:int) (c:t): Term.typ =
@@ -90,20 +92,26 @@ let name_of_index (i: int) (gamma: t): string =
 
 
 let empty: t =
-    Segmented_array.empty
+    {
+        entries = Segmented_array.empty;
+    }
 
 
-let push (name: string) (typ:Term.typ) (definition:definition) (c:t): t =
-    Segmented_array.push
-      {name; typ; definition}
-      c
+
+let push (name: string) (typ: Term.typ) (definition: definition) (c: t): t =
+    {
+        entries =
+            Segmented_array.push
+                {name; typ; definition}
+                c.entries;
+    }
 
 
 let push_local (nme: string) (typ: Term.typ) (c:t): t =
     push nme typ Assumption c
 
 
-let push_definition
+let add_definition
     (name: string) (typ: Term.typ) (def: Term.t) (c: t)
     : t
 =
@@ -123,20 +131,26 @@ let add_entry (name: string) (typ:Term.typ*int) (def:definition) (c:t): t =
 
 
 let add_axiom (name: string) (typ: Term.typ) (c: t): t =
-push
-    name
-    typ
-    Axiom
-    c
+    push
+        name
+        typ
+        Axiom
+        c
 
 
 
 let add_builtin_type (descr: string) (name: string) (typ: Term.typ) (c: t): t =
-push
-    name
-    typ
-    (Builtin_type descr)
-    c
+    push
+        name
+        typ
+        (Builtin_type descr)
+        c
+
+
+
+let add_inductive (_: Inductive.t) (_: t): t =
+    assert false
+
 
 
 

@@ -36,12 +36,15 @@ let level_of_index = index_of_level
 
 
 
-let standard (): t =
-    let gamma = Gamma.standard () in
-    {gamma;
-     map =
+let add_new_globals (gamma: Gamma.t) (c: t): t =
+    let cnt0 = count c in
+    assert (cnt0 <= Gamma.count gamma);
+    {
+        gamma;
+
+        map =
         Interval.fold
-            Name_map.empty
+            c.map
             (fun i m ->
                 let open Gamma in
                 match
@@ -58,9 +61,16 @@ let standard (): t =
                 | Ok map ->
                     map
             )
-            0
+            cnt0
             (Gamma.count gamma)
     }
+
+
+
+let standard (): t =
+    add_new_globals
+        (Gamma.standard ())
+        empty
 
 
 let compute (t: Term.t) (c: t): Term.t =
@@ -134,13 +144,22 @@ let add_definition
                 map;
 
                 gamma =
-                    Gamma.push_definition name typ exp c.gamma
+                    Gamma.add_definition name typ exp c.gamma
             })
         (Name_map.add_global
             name
             typ
             c.gamma
             c.map)
+
+
+
+let add_inductive (ind: Inductive.t) (c: t): t =
+    add_new_globals
+        (Gamma.add_inductive ind c.gamma)
+        c
+
+
 
 
 

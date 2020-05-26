@@ -68,4 +68,6 @@ val compute: Term.t -> t -> Term.t
 
 val push_local: string -> Term.typ -> t -> t
 
-val push_definition: string -> Term.typ -> Term.t -> t -> t
+val add_definition: string -> Term.typ -> Term.t -> t -> t
+
+val add_inductive: Inductive.t -> t -> t

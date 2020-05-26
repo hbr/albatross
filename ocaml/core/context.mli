@@ -28,6 +28,8 @@ val add_builtin_type: string -> string -> Term.typ -> t -> t
 
 val add_definition: string -> Term.typ -> Term.t -> t -> (t, int) result
 
+val add_inductive: Inductive.t -> t -> t
+
 
 module Pretty (P:Pretty_printer.SIG):
 sig

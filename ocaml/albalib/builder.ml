@@ -75,7 +75,7 @@ let add_inductive
     >>= fun ind ->
     Printf.printf "%s\n"
         (Print_inductive.string_of_inductive ind (Context.gamma c));
-    Ok c
+    Ok (Context.add_inductive ind c)
 
 
 
