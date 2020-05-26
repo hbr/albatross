@@ -68,4 +68,10 @@ val ith_type: int -> t -> string * Term.typ
 
 val count_constructors: int -> t -> int
 
-val constructor: int -> int -> t -> string * Term.typ
+val raw_constructor: int -> int -> t -> string * Term.typ
+(** [raw_constructor i j ind]
+
+    The name and the type of the [j]th constructor of the [i]th inductive type
+    of the family, valid in a context with the inductive types and the
+    parameters.
+*)

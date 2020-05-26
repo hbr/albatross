@@ -116,7 +116,7 @@ struct
                     lst
                 else
                     let j = j - 1 in
-                    let name, typ = Inductive.constructor i j ind in
+                    let name, typ = Inductive.raw_constructor i j ind in
                     let co =
                         print_name name
                         <+> string ": "

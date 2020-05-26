@@ -60,7 +60,6 @@ let class_header
     *)
     assert (i < Array.length inds);
     let (name, (params, kind_exp)), _ = inds.(i) in
-    Printf.printf "analyze header of %s\n" (Located.value name);
     List_monadic.(
         fold_left
             (fun (name, param_typ) (lst,c1) ->

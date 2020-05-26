@@ -176,7 +176,7 @@ let count_constructors (i: int) (ind: t): int =
 
 
 
-let constructor (i: int) (j: int) (ind: t): string * Term.typ =
+let raw_constructor (i: int) (j: int) (ind: t): string * Term.typ =
     assert (i < count_types ind);
     assert (j < count_constructors i ind);
     let name, typ =
