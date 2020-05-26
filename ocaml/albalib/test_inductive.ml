@@ -98,16 +98,43 @@ let%test _ =
         false
 
 
+let%test _ =
+    let src = "class I :=\n\
+               class I :="
+    in
+    match
+        add_inductive src Context.empty
+    with
+    | Error (_, Build_problem.Duplicate_inductive) ->
+        true
+    | _ ->
+        false
+
+
 
 (*  Test the constructors
     ------------------------
 
+    - no duplicate constructor names
     - if there are indices, then type must be explicit
     - construct a object of the corresponding inductive type
     - positivity
     - positivity in family
     - positivity with other inductive type
 *)
+
+let%test _ =
+    let src = "class I := c; c"
+    in
+    match
+        add_inductive src Context.empty
+    with
+    | Error (_, Build_problem.Duplicate_constructor) ->
+        true
+    | _ ->
+        false
+
+
 
 let%test _ =
     let src = "class I A: A -> Any := constr"

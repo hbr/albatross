@@ -47,72 +47,9 @@ let build_type_or_any
 
 
 
-let class_header
-    (i: int)
-    (inds: Source_entry.inductive array)
-    (c0: Context.t)
-    : (range * params_located * Inductive.Header.t) result2
-=
-    (* Analyze the [i]ith class header of the inductive family [inds].
-
-         class Name (P0: PT0) (P1: PT1) ... : TP
-
-    *)
-    assert (i < Array.length inds);
-    let (name, (params, kind_exp)), _ = inds.(i) in
-    List_monadic.(
-        fold_left
-            (fun (name, param_typ) (lst,c1) ->
-                build_type_or_any name param_typ c1
-                >>=
-                fun param_typ ->
-                Ok (
-                    (name, param_typ) :: lst,
-                    Context.push_local
-                        (Located.value name)
-                        param_typ
-                        c1
-                )
-            )
-            params
-            ([],c0)
-    )
-    >>= fun (params, c1) ->
-    build_type_or_any name kind_exp c1
-    >>= fun kind ->
-    match
-        Algo.split_kind kind (Context.gamma c1)
-    with
-    | None ->
-        assert (kind_exp <> None);
-        let range =
-            Located.range (Option.value kind_exp)
-        in
-        Error (
-            range,
-            Build_problem.No_inductive_type
-        )
-    | Some (args, sort) ->
-        Ok (
-            Located.range name
-            ,
-            Array.of_list params
-            ,
-            Inductive.Header.make
-                (Located.value name)
-                kind
-                args
-                sort
-        )
-
-
-
-
-
-
 let check_params
     (params0: Inductive.params)
-    (range: range)
+    (name: string Located.t)
     (params: params_located)
     (context: Context.t)
     : unit result2
@@ -125,7 +62,7 @@ let check_params
     let nparams = Array.length params0 in
     if nparams <> Array.length params then
         Error (
-            range,
+            Located.range name,
             Build_problem.Wrong_parameter_count nparams
         )
     else
@@ -170,6 +107,75 @@ let check_params
 
 
 
+
+
+let class_header
+    (i: int)
+    (inds: Source_entry.inductive array)
+    (c0: Context.t)
+    : (string Located.t * params_located * Inductive.Header.t) result2
+=
+    (* Analyze the [i]ith class header of the inductive family [inds].
+
+         class Name (P0: PT0) (P1: PT1) ... : TP
+
+    *)
+    assert (i < Array.length inds);
+    let (name, (params, kind_exp)), _ = inds.(i) in
+    List_monadic.(
+        fold_left
+            (fun (name, param_typ) (lst,c1) ->
+                build_type_or_any name param_typ c1
+                >>=
+                fun param_typ ->
+                Ok (
+                    (name, param_typ) :: lst,
+                    Context.push_local
+                        (Located.value name)
+                        param_typ
+                        c1
+                )
+            )
+            params
+            ([],c0)
+    )
+    >>= fun (params, c1) ->
+    build_type_or_any name kind_exp c1
+    >>= fun kind ->
+    match
+        Algo.split_kind kind (Context.gamma c1)
+    with
+    | None ->
+        assert (kind_exp <> None);
+        let range =
+            Located.range (Option.value kind_exp)
+        in
+        Error (range, Build_problem.No_inductive_type)
+    | Some (args, sort) ->
+        let name_str = Located.value name
+        in
+        let params = Array.of_list params
+        and header =
+            Inductive.Header.make name_str kind args sort
+        in
+        let params1 =
+            Array.map (fun (name,typ) -> Located.value name, typ) params
+        in
+        if
+            Context.can_add_global
+                name_str
+                (Inductive.Header.kind params1 header)
+                c0
+        then
+            Ok (name, params, header)
+        else
+            Error (Located.range name, Build_problem.Ambiguous_definition)
+
+
+
+
+
+
 let class_headers
     (inds: Source_entry.inductive array)
     (context: Context.t)
@@ -178,23 +184,27 @@ let class_headers
     assert (0 < Array.length inds);
     class_header 0 inds context
     >>=
-    fun (_, params0, header0) ->
+    fun (name0, params0, header0) ->
     let params0 =
         Array.map (fun (name, typ) -> Located.value name, typ) params0
     in
     Interval_monadic.fold
-        (fun i lst ->
+        (fun i (set, lst) ->
             class_header i inds context
             >>=
-            fun (range, params, header) ->
-            check_params params0 range params context
+            fun (name, params, header) ->
+            check_params params0 name params context
             >>= fun _ ->
-            Ok (header :: lst)
+            let name_str = Located.value name in
+            if String_set.mem name_str set then
+                Error(Located.range name, Build_problem.Duplicate_inductive)
+            else
+                Ok (String_set.add name_str set, header :: lst)
         )
         1
         (Array.length inds)
-        []
-    >>= fun lst ->
+        (String_set.singleton (Located.value name0), [])
+    >>= fun (_, lst) ->
     Ok (params0, Array.of_list (header0 :: List.rev lst))
 
 
@@ -488,14 +498,19 @@ let one_constructor_set
 =
     let module Arr = Array.Monadic (Result) in
     Arr.fold_left
-        (fun constructor lst ->
+        (fun constructor (set, lst) ->
             one_constructor i params headers constructor c
             >>= fun co ->
-            Ok (co :: lst)
+            let name, _ = constructor in
+            let name_str = Located.value name in
+            if String_set.mem name_str set then
+                Error (Located.range name, Build_problem.Duplicate_constructor)
+            else
+                Ok (String_set.add name_str set, co :: lst)
         )
         (snd inds.(i))
-        []
-    >>= fun lst ->
+        (String_set.empty, [])
+    >>= fun (_, lst) ->
     Ok (Array.of_list (List.rev lst))
 
 

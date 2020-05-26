@@ -20,6 +20,8 @@ val compute: Term.t -> t -> Term.t
 
 val push_local: string -> Term.typ -> t -> t
 
+val can_add_global: string -> Term.typ -> t -> bool
+
 val add_axiom: string -> Term.typ -> t -> t
 
 val add_builtin_type: string -> string -> Term.typ -> t -> t

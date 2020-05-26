@@ -18,12 +18,14 @@ type description =
     | Wrong_base of type_in_context list * type_in_context list
     | Ambiguous of type_in_context list
     | Name_violation of string * string (* case, kind *)
-    | Ambiguous_definition of int
+    | Ambiguous_definition
     | Wrong_parameter_count of int
     | Wrong_parameter_name of string
     | Wrong_parameter_type of Term.typ * Gamma.t
     | Missing_inductive_type
     | No_inductive_type
+    | Duplicate_inductive
+    | Duplicate_constructor
     | Wrong_type_constructed
     | Negative
     | Not_positive

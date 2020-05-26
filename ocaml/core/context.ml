@@ -83,6 +83,17 @@ let push_local (name: string) (typ: Term.typ) (c: t): t =
 
 
 
+let can_add_global (name: string) (typ: Term.typ) (c: t): bool =
+    match
+        Name_map.add_global name typ c.gamma c.map
+    with
+    | Ok _ ->
+        true
+    | Error _ ->
+        false
+
+
+
 let add_axiom (name: string) (typ: Term.typ) (c: t): t =
     {
         gamma =

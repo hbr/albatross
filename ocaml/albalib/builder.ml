@@ -51,8 +51,8 @@ let add_definition
             term
             context
     with
-    | Error duplicate ->
-        Error (Located.range name, Ambiguous_definition duplicate)
+    | Error _ ->
+        Error (Located.range name, Ambiguous_definition)
 
     | Ok context ->
         Ok context
