@@ -254,26 +254,37 @@ let push_types
 
 
 
+
+module Pair_set =
+    Set.Make (
+        struct
+            type t = int * int
+            let compare (i1,j1) (i2,j2) =
+                let cmp = Stdlib.compare i1 i2 in
+                if cmp = 0 then
+                    Stdlib.compare j1 j2
+                else
+                    cmp
+        end
+    )
+
+
+
+
+
+
 let positive_occurrences
     (p: int -> bool)
     (typ: Term.typ)
     (gamma: Gamma.t)
     : (int * int) list option
 =
+    (* [typ] is the final type of the argument type of a contructor argument.
+    Check that all types of the inductive family do not occur or occur only
+    positively (directly or nested) as [I a1 a2 ...] where none of the I's
+    appears in any ai.
+    *)
     let open Option in
-    let module Pair_set =
-        Set.Make (
-            struct
-                type t = int * int
-                let compare (i1,j1) (i2,j2) =
-                    let cmp = Stdlib.compare i1 i2 in
-                    if cmp = 0 then
-                        Stdlib.compare j1 j2
-                    else
-                        cmp
-            end
-        )
-    in
     let rec collect typ set =
         let f, args = Algo.key_split typ gamma in
         match f with
@@ -310,14 +321,45 @@ let positive_occurrences
 
 
 
-let check_positive
-    (p: int -> bool)
-    (name: string Located.t)
+
+
+
+let fold_type
+    (argf: 'a -> Term.typ -> Gamma.t -> 'a result2)
+    (resf: 'a -> Term.typ -> Gamma.t -> 'b result2)
+    (a: 'a)
     (typ: Term.typ)
-    (c: Context.t)
-    : unit result2
+    (gamma: Gamma.t) :
+    'b result2
 =
-    (* [typ] is the final type of an argument of the constructor with name
+    let rec fold a typ gamma =
+        let open Term
+        in
+        match Algo.key_normal typ gamma with
+        | Pi (arg, res, info) ->
+            argf a arg gamma
+            >>=
+            fun a ->
+            fold a res (Gamma.push_local (Pi_info.name info) arg gamma)
+
+        | res ->
+            resf a res gamma
+    in
+    fold a typ gamma
+
+
+
+
+
+let check_constructor_argument_result_type
+    (p: int -> bool)
+    (range: range)
+    ()
+    (typ: Term.typ)
+    (gamma: Gamma.t):
+    unit result2
+=
+    (* [typ] is the final type of an argument type of the constructor with name
     [name] of the inductive family.
 
     An inductive [I] type of the family either
@@ -327,50 +369,77 @@ let check_positive
         - either immediately
         - or indirectly as I1 ... (I a0 a1 ...]) ...
     *)
-    match positive_occurrences p typ (Context.gamma c) with
+    match positive_occurrences p typ gamma with
     | None ->
-        Error (
-            Located.range name,
-            Build_problem.Not_positive
-        )
+        Error (range, Build_problem.Not_positive)
+
     | Some [] ->
         Ok ()
-    | Some _ ->
+
+    | Some lst ->
+        List.iter
+            (fun (level,iparam) ->
+                let name = Gamma.name_at_level level gamma
+                and typ  = Gamma.type_at_level level gamma
+                in
+                Printf.printf "nested %s: %s (%d)\n"
+                    name
+                    (Term_printer.string_of_term typ gamma)
+                    iparam;
+                assert false
+            )
+            lst;
         assert false (* nyi: nested positivity *)
 
 
 
-let check_positivity
+
+
+let check_constructor_argument_type
     (is_inductive: int -> bool)
-    (name: string Located.t)
-    ((info, typ): Term.Pi_info.t * Term.typ)
-    (c: Context.t)
-    : Context.t result2
+    (range: range)
+    ()
+    (arg_typ: Term.typ)
+    (gamma: Gamma.t) :
+    unit result2
 =
-    (* An inductive type must not appear in a negative position of the argument
-    type [typ]. It is allowed in a positive position. But in a positive position
-    it has to be an inductive type either directly or nested.
-    *)
-    let open Term in
-    let rec check typ c =
-        match Algo.key_normal typ (Context.gamma c) with
-        | Pi (arg, res, info) ->
-            if Gamma.level_has is_inductive arg (Context.gamma c)
-            then
-                Error (
-                    Located.range name,
-                    Build_problem.Negative
-                )
+    fold_type
+        (fun _ typ gamma ->
+            if Gamma.level_has is_inductive typ gamma then
+                Error (range, Build_problem.Negative)
             else
-                check
-                    res
-                    (Context.push_local (Pi_info.name info) arg c)
-        | _ ->
-            check_positive is_inductive name typ c
-    in
-    check typ c
-    >>= fun _ ->
-    Ok (Context.push_local (Pi_info.name info) typ c)
+                Ok ())
+        (check_constructor_argument_result_type is_inductive range)
+        ()
+        arg_typ
+        gamma
+
+
+
+
+
+let check_constructor_result_type
+    (i: int)
+    (cnt0: int)
+    (params: Inductive.params)
+    (headers: Inductive.Header.t array)
+    (range: range)
+    ()
+    (res: Term.typ)
+    (gamma: Gamma.t) :
+    unit result2
+=
+    if
+        Inductive.Header.is_well_constructed
+            i
+            params
+            headers
+            Gamma.(count gamma - cnt0)
+            res
+    then
+        Ok ()
+    else
+        Error (range, Build_problem.Wrong_type_constructed)
 
 
 
@@ -387,42 +456,22 @@ let check_constructor_type
 =
     let nparams = Array.length params
     and ntypes  = Array.length headers
+    and range   = Located.range name
     in
     let cnt0 = Context.count c - nparams - ntypes in
     assert (0 <= cnt0);
     let is_inductive level =
         cnt0 <= level && level < cnt0 + ntypes
     in
-    let args, res =
-        Algo.split_type typ (Context.gamma c)
-    in
-    List_monadic.(
-        fold_left
-            (fun arg c1 ->
-                check_positivity
-                    is_inductive
-                    name
-                    arg
-                    c1)
-            args
-            c
-    )
-    >>= fun c1 ->
-    if
-        Inductive.Header.is_well_constructed
-            i
-            params
-            headers
-            Context.(count c1 - count c)
-            res
-    then
-        Ok (Inductive.Constructor.make (Located.value name) typ)
-    else(
-        Error (
-            Located.range name,
-            Build_problem.Wrong_type_constructed
-        )
-    )
+    fold_type
+        (check_constructor_argument_type is_inductive range)
+        (check_constructor_result_type i (Context.count c) params headers range)
+        ()
+        typ
+        (Context.gamma c)
+    >>= fun _ ->
+    Ok (Inductive.Constructor.make (Located.value name) typ)
+
 
 
 
