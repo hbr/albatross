@@ -7,6 +7,8 @@ type params = (string * Term.typ) array (* Valid in the initial context. *)
 
 
 let push_params (n: int) (params: params) (res: Term.typ): Term.typ =
+    (* Push parameters in front of a type. For an inductive kind [n] must be
+    zero. For a constructor type [n] must be the number of types. *)
     Array.fold_right
         (fun (name, typ) res ->
             Term.(Pi (up n typ, res, Pi_info.typed name)))
@@ -142,12 +144,19 @@ type t = {
 
     params: params;
 
+    negative_params: Common.Int_set.t;
+
     types: Type.t array;
 }
 
 
-let make params types =
-    {n_up = 0; params; types}
+let make params negative_params types =
+    {n_up = 0; params; negative_params; types}
+
+
+let up (n: int) (ind: t): t =
+    {ind with n_up = n + ind.n_up}
+
 
 
 let count_types (ind: t): int =
@@ -194,7 +203,7 @@ let raw_constructor (i: int) (j: int) (ind: t): string * Term.typ =
         Constructor.get ind.types.(i).constructors.(j)
     in
     name,
-    Term.up ind.n_up typ
+    Term.up_from ind.n_up (count_params ind + count_types ind) typ
 
 
 
@@ -206,8 +215,8 @@ let constructor (i: int) (j: int) (ind: t): string * Term.typ =
     let name, typ =
         Constructor.get ind.types.(i).constructors.(j)
     in
+    let typ = push_params ntypes ind.params typ in
     name,
-    push_params
-        (ind.n_up + ntypes)
-        ind.params
-        (Term.up ind.n_up typ)
+    Term.up
+        ind.n_up
+        typ

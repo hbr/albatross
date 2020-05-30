@@ -56,7 +56,10 @@ end
 
 type t
 
-val make: params -> Type.t array -> t
+val make: params -> Fmlib.Common.Int_set.t -> Type.t array -> t
+
+val up: int -> t -> t
+
 
 val count_types: t -> int
 
@@ -79,3 +82,8 @@ val raw_constructor: int -> int -> t -> string * Term.typ
 *)
 
 val constructor: int -> int -> t -> string * Term.typ
+(** [constructor i j ind]
+
+    The name and the type of the [j]th constructor of the [i]th inductive type
+    of the family, valid in a context with the inductive types.
+*)
