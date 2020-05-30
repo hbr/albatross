@@ -387,10 +387,27 @@ let check_constructor_argument_result_type
                     name
                     (Term_printer.string_of_term typ gamma)
                     iparam;
-                assert false
+                let ind =  Gamma.inductive_at_level level gamma in
+                Printf.printf "full definition\n%s\n"
+                    (Print_inductive.string_of_inductive ind gamma)
             )
             lst;
-        assert false (* nyi: nested positivity *)
+            let get_ind level = Gamma.inductive_at_level level gamma
+            in
+            match
+                List.find
+                    (fun (level, iparam) ->
+                        let ind = get_ind level in
+                        not (Inductive.is_param_positive iparam ind))
+                    lst
+            with
+            | None ->
+                Ok negative_params
+            | Some (level, iparam) ->
+                Error (
+                    range,
+                    Build_problem.Nested_negative (get_ind level, iparam, gamma)
+                )
 
 
 
@@ -398,6 +415,8 @@ let check_constructor_argument_result_type
 
 let check_constructor_argument_type
     (is_inductive: int -> bool)
+    (param1: int)
+    (param2: int)
     (range: range)
     (negative_params: Int_set.t)
     (arg_typ: Term.typ)
@@ -409,8 +428,19 @@ let check_constructor_argument_type
             if Gamma.level_has is_inductive typ gamma then
                 Error (range, Build_problem.Negative)
             else
-                (* MISSING: collect negative params *)
-                Ok negative_params)
+                Ok (
+                    Term.fold_free
+                        (fun idx set ->
+                            let level = Gamma.level_of_index idx gamma in
+                            if param1 <= level && level < param2 then
+                                Int_set.add (level - param1) set
+                            else
+                                set
+                        )
+                        typ
+                        negative_params
+                )
+        )
         (check_constructor_argument_result_type is_inductive range)
         negative_params
         arg_typ
@@ -467,7 +497,11 @@ let check_constructor_type
         cnt0 <= level && level < cnt0 + ntypes
     in
     fold_type
-        (check_constructor_argument_type is_inductive range)
+        (check_constructor_argument_type
+            is_inductive
+            (cnt0 + ntypes)
+            (cnt0 + ntypes + nparams)
+            range)
         (check_constructor_result_type i (Context.count c) params headers range)
         negative_params
         typ
@@ -601,8 +635,8 @@ let constructors
         headers
         (0, Int_set.empty, [])
     >>=
-    fun (_, _, types) ->
-    Ok Inductive.(make params (Array.of_list (List.rev types)))
+    fun (_, negative_params, types) ->
+    Ok Inductive.(make params negative_params (Array.of_list (List.rev types)))
 
 
 

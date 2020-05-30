@@ -28,6 +28,7 @@ type description =
     | Duplicate_constructor
     | Wrong_type_constructed
     | Negative
+    | Nested_negative of Inductive.t * int * Gamma.t
     | Not_positive
     | Not_yet_implemented of string
 

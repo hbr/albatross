@@ -28,6 +28,7 @@ type description =
     | Duplicate_constructor
     | Wrong_type_constructed
     | Negative
+    | Nested_negative of Inductive.t * int * Gamma.t
     | Not_positive
     | Not_yet_implemented of string
 
@@ -38,6 +39,7 @@ type t = range * description
 module Print (P: Pretty_printer.SIG) =
 struct
     module PP = Term_printer.Pretty (Gamma) (P)
+    module PPInd = Print_inductive.Make (Gamma) (P)
 
 
     let type_or_types (l: 'a list): P.t =
@@ -274,6 +276,25 @@ struct
                 One of its argument types is a function type which uses \
                 an object of some of the inductive types as an argument i.e. \
                 one of the inductive types appears in a negative position."
+            <+> cut
+
+        | Nested_negative (ind, iparam, gamma) ->
+            wrap_words
+                "The constructor does not satisfy the nested positivity \
+                condition. One of its arguments uses an inductive type of \
+                this definition nested within the inductive type"
+            <+> cut
+            <+> nest 4 (
+                cut
+                <+>
+                PPInd.print ind gamma
+            )
+            <+> cut <+> cut
+            <+> wrap_words "as the parameter <"
+            <+> string (Inductive.parameter_name iparam ind)
+            <+> wrap_words
+                "> which does not satisfy the \
+                 positivity condition."
             <+> cut
 
         | Not_positive ->

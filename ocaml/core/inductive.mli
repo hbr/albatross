@@ -65,6 +65,10 @@ val count_types: t -> int
 
 val count_params: t -> int
 
+val is_param_positive: int -> t -> bool
+
+val parameter_name: int -> t -> string
+
 val parameters: t -> params
 
 val ith_type: int -> t -> string * Term.typ

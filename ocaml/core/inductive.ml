@@ -167,6 +167,16 @@ let count_params (ind: t): int =
     Array.length ind.params
 
 
+let is_param_positive (iparam: int) (ind: t): bool =
+    assert (iparam < count_params ind);
+    not (Common.Int_set.mem iparam ind.negative_params)
+
+
+let parameter_name (iparam: int) (ind: t): string =
+    assert (iparam < count_params ind);
+    fst ind.params.(iparam)
+
+
 let parameters (ind: t): params =
     let n = ind.n_up + count_types ind
     in

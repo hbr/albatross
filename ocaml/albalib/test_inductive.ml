@@ -213,7 +213,7 @@ let%test _ =
         match
             add_inductive src2 c
         with
-        | Error (_, Build_problem.Not_positive) ->
+        | Error (_, Build_problem.Nested_negative _) ->
             true
         | _ ->
             false
