@@ -376,8 +376,14 @@ let negative_parameter_occurrences
                 if
                     List.for_all
                         (fun (level,iparam) ->
-                            is_inductive level
-                            && param1 + iparam = level_param)
+                            (   is_inductive level
+                                && param1 + iparam = level_param)
+                            ||
+                            match Gamma.inductive_at_level level gamma with
+                            | None ->
+                                false
+                            | Some ind ->
+                                Inductive.is_param_positive iparam ind)
                         lst
                 then
                     set
