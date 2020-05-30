@@ -64,6 +64,8 @@ val variable_at_level: int -> t -> Term.t
 
 val definition_term: int -> t -> Term.t option
 
+val inductive_at_level: int -> t -> Inductive.t
+
 val standard: unit -> t
 
 val compute: Term.t -> t -> Term.t
