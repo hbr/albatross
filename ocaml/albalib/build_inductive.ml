@@ -260,6 +260,35 @@ let push_types
 
 
 
+let fold_type
+    (argf: 'a -> Term.typ -> Gamma.t -> 'a result2)
+    (resf: 'a -> Term.typ -> Gamma.t -> 'b result2)
+    (a: 'a)
+    (typ: Term.typ)
+    (gamma: Gamma.t) :
+    'b result2
+=
+    let rec fold a typ gamma =
+        let open Term
+        in
+        match Algo.key_normal typ gamma with
+        | Pi (arg, res, info) ->
+            argf a arg gamma
+            >>=
+            fun a ->
+            fold a res (Gamma.push_local (Pi_info.name info) arg gamma)
+
+        | res ->
+            resf a res gamma
+    in
+    fold a typ gamma
+
+
+
+
+
+
+
 let positive_occurrences
     (p: int -> bool)
     (typ: Term.typ)
@@ -315,31 +344,47 @@ let positive_occurrences
 
 
 
-
-
-
-let fold_type
-    (argf: 'a -> Term.typ -> Gamma.t -> 'a result2)
-    (resf: 'a -> Term.typ -> Gamma.t -> 'b result2)
-    (a: 'a)
+let negative_parameter_occurrences
+    (is_inductive: int -> bool)
+    (param1: int)
+    (param2: int)
     (typ: Term.typ)
-    (gamma: Gamma.t) :
-    'b result2
+    (gamma: Gamma.t)
+    (negative_params: Int_set.t):
+    Int_set.t
 =
-    let rec fold a typ gamma =
-        let open Term
-        in
-        match Algo.key_normal typ gamma with
-        | Pi (arg, res, info) ->
-            argf a arg gamma
-            >>=
-            fun a ->
-            fold a res (Gamma.push_local (Pi_info.name info) arg gamma)
+    (* [typ] is the final type of an argument type of a constructor of the
+    inductive family.
 
-        | res ->
-            resf a res gamma
-    in
-    fold a typ gamma
+    Collect all occurrences of the parameters which might not be strictly
+    positive, i.e. if a parameter occurs within some application and it is not
+    the application of a type of the inductive family or the parameter does not
+    occur in the correct position.
+    *)
+    Common.Interval.fold
+        negative_params
+        (fun level_param set ->
+            match
+                positive_occurrences
+                    (fun level -> level = level_param)
+                    typ
+                    gamma
+            with
+            | None ->
+                set
+            | Some lst ->
+                if
+                    List.for_all
+                        (fun (level,iparam) ->
+                            is_inductive level
+                            && param1 + iparam = level_param)
+                        lst
+                then
+                    set
+                else
+                    Int_set.add (level_param - param1) set
+        )
+        param1 param2
 
 
 
@@ -347,14 +392,16 @@ let fold_type
 
 let check_constructor_argument_result_type
     (is_inductive: int -> bool)
+    (param1: int)
+    (param2: int)
     (range: range)
     (negative_params: Int_set.t)
     (typ: Term.typ)
     (gamma: Gamma.t):
     Int_set.t result2
 =
-    (* [typ] is the final type of an argument type of the constructor with name
-    [name] of the inductive family.
+    (* [typ] is the final type of an argument type of a constructor of the
+    inductive family.
 
     An inductive [I] type of the family either
 
@@ -366,10 +413,6 @@ let check_constructor_argument_result_type
     match positive_occurrences is_inductive typ gamma with
     | None ->
         Error (range, Build_problem.Not_positive)
-
-    | Some [] ->
-        (* Missing: Which parameters are not strictly positive? *)
-        Ok negative_params
 
     | Some lst ->
         let get_ind level = Gamma.inductive_at_level level gamma
@@ -385,8 +428,13 @@ let check_constructor_argument_result_type
                 lst
         with
         | None ->
-            (* Missing: Which parameters are not strictly positive? *)
-            Ok negative_params
+            Ok (
+                negative_parameter_occurrences
+                    is_inductive param1 param2
+                    typ gamma
+                    negative_params
+            )
+
         | Some (level, iparam) ->
             match get_ind level with
             | None ->
@@ -429,7 +477,10 @@ let check_constructor_argument_type
                         negative_params
                 )
         )
-        (check_constructor_argument_result_type is_inductive range)
+        (check_constructor_argument_result_type
+            is_inductive
+            param1 param2
+            range)
         negative_params
         arg_typ
         gamma
