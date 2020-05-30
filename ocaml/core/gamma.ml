@@ -204,18 +204,14 @@ let add_inductive (ind: Inductive.t) (c: t): t =
     }
 
 
-let inductive_at_level (level: int) (c: t): Inductive.t =
-    let i =
-        match (Sequence.elem level c.entries).definition with
-        | Inductive_type (i, _) ->
-            i
-        | Constructor (i, _, _) ->
-            i
-        | _ ->
-            assert false (* Illegal call! *)
-    in
-    let cnt0, ind = Sequence.elem i c.inductives in
-    Inductive.up (count c - cnt0) ind
+let inductive_at_level (level: int) (c: t): Inductive.t option =
+    match (Sequence.elem level c.entries).definition with
+    | Inductive_type (i, _) ->
+        let cnt0, ind = Sequence.elem i c.inductives in
+        Some (Inductive.up (count c - cnt0) ind)
+
+    | _ ->
+        None
 
 
 

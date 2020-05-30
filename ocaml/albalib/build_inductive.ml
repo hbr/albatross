@@ -255,19 +255,6 @@ let push_types
 
 
 
-module Pair_set =
-    Set.Make (
-        struct
-            type t = int * int
-            let compare (i1,j1) (i2,j2) =
-                let cmp = Stdlib.compare i1 i2 in
-                if cmp = 0 then
-                    Stdlib.compare j1 j2
-                else
-                    cmp
-        end
-    )
-
 
 
 
@@ -283,9 +270,18 @@ let positive_occurrences
     Check that all types of the inductive family do not occur or occur only
     positively (directly or nested) as [I a1 a2 ...] where none of the I's
     appears in any ai.
+
+    Return [None]
+
+        - if [I] occurs as [I a1 a2 ...] and [I] occurs within some [ai].
+
+        - if [typ] does not start with a variable and some [I] occurs in [typ].
+
+    Return list of pairs (level, iparam)
+
+        - [I] occurs indirectly in [level] as [iparam] argument.
     *)
-    let open Option in
-    let rec collect typ set =
+    let rec collect typ lst =
         let f, args = Algo.key_split typ gamma in
         match f with
         | Variable i ->
@@ -298,25 +294,23 @@ let positive_occurrences
                 then
                     None
                 else
-                    Some set
+                    Some lst
             else
                 (* check indirect occurrences in args *)
                 let module LMon = List.Monadic (Option) in
                 LMon.foldi_left
-                        (fun k (arg,_) set ->
-                            collect arg (Pair_set.add (level,k) set))
+                        (fun k (arg,_) lst ->
+                            collect arg ((level,k) :: lst))
                         args
-                        set
+                        lst
 
         | _ ->
             if Gamma.level_has p f gamma then
                 None
             else
-                Some set
+                Some lst
     in
-    map
-        Pair_set.elements
-        (collect typ Pair_set.empty)
+    collect typ []
 
 
 
@@ -352,7 +346,7 @@ let fold_type
 
 
 let check_constructor_argument_result_type
-    (p: int -> bool)
+    (is_inductive: int -> bool)
     (range: range)
     (negative_params: Int_set.t)
     (typ: Term.typ)
@@ -369,7 +363,7 @@ let check_constructor_argument_result_type
         - either immediately
         - or indirectly as I1 ... (I a0 a1 ...]) ...
     *)
-    match positive_occurrences p typ gamma with
+    match positive_occurrences is_inductive typ gamma with
     | None ->
         Error (range, Build_problem.Not_positive)
 
@@ -378,35 +372,29 @@ let check_constructor_argument_result_type
         Ok negative_params
 
     | Some lst ->
-        List.iter
-            (fun (level,iparam) ->
-                let name = Gamma.name_at_level level gamma
-                and typ  = Gamma.type_at_level level gamma
-                in
-                Printf.printf "nested %s: %s (%d)\n"
-                    name
-                    (Term_printer.string_of_term typ gamma)
-                    iparam;
-                let ind =  Gamma.inductive_at_level level gamma in
-                Printf.printf "full definition\n%s\n"
-                    (Print_inductive.string_of_inductive ind gamma)
-            )
-            lst;
-            let get_ind level = Gamma.inductive_at_level level gamma
-            in
-            match
-                List.find
-                    (fun (level, iparam) ->
-                        let ind = get_ind level in
-                        not (Inductive.is_param_positive iparam ind))
-                    lst
-            with
+        let get_ind level = Gamma.inductive_at_level level gamma
+        in
+        match
+            List.find
+                (fun (level, iparam) ->
+                    match get_ind level with
+                    | None ->
+                        false
+                    | Some ind ->
+                        Inductive.is_param_negative iparam ind)
+                lst
+        with
+        | None ->
+            (* Missing: Which parameters are not strictly positive? *)
+            Ok negative_params
+        | Some (level, iparam) ->
+            match get_ind level with
             | None ->
-                Ok negative_params
-            | Some (level, iparam) ->
+                Error (range, Build_problem.Not_positive)
+            | Some ind ->
                 Error (
                     range,
-                    Build_problem.Nested_negative (get_ind level, iparam, gamma)
+                    Build_problem.Nested_negative (ind, iparam, gamma)
                 )
 
 
