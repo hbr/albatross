@@ -9,6 +9,10 @@ module Inductive_parser =
         end)
 
 
+module Expression_parser =
+    Parser_lang.Make (Expression)
+
+
 let add_inductive
     (src: string)
     (c: Context.t)
@@ -24,6 +28,22 @@ let add_inductive
         assert false
     | Some inds ->
         Builder.add_inductive inds c
+
+
+let build_expression
+    (src: string)
+    (c: Context.t):
+    (Term.t * Term.typ, Build_problem.t) result
+=
+    let open Expression_parser in
+    let p = run (expression ()) src in
+    assert (has_ended p);
+    assert (has_succeeded p);
+    match result p with
+    | None ->
+        assert false (* Syntax error *)
+    | Some exp ->
+        Build_expression.build exp c
 
 
 
@@ -217,3 +237,21 @@ let%test _ =
             true
         | _ ->
             false
+
+
+let%test _ =
+    let open Fmlib.Result in
+    let src1 = "Any -> Any"
+    and src2 = "class II := co : TC II -> II"
+    in
+    match
+        (
+            build_expression src1 Context.empty
+            >>= fun (typ, _) ->
+            add_inductive src2 (Context.(add_builtin_type "TC" "TC" typ empty))
+        )
+    with
+    | Error (_, Not_positive) ->
+        true
+    | _ ->
+        false

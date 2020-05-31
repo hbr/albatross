@@ -428,7 +428,7 @@ let check_constructor_argument_result_type
                 (fun (level, iparam) ->
                     match get_ind level with
                     | None ->
-                        false
+                        true
                     | Some ind ->
                         Inductive.is_param_negative iparam ind)
                 lst
