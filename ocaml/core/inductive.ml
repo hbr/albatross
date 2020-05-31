@@ -9,9 +9,9 @@ type params = (string * Term.typ) array (* Valid in the initial context. *)
 let push_params (n: int) (params: params) (res: Term.typ): Term.typ =
     (* Push parameters in front of a type. For an inductive kind [n] must be
     zero. For a constructor type [n] must be the number of types. *)
-    Array.fold_right
-        (fun (name, typ) res ->
-            Term.(Pi (up n typ, res, Pi_info.typed name)))
+    Array.foldi_right
+        (fun iparam (name, typ) res ->
+            Term.(Pi (up_from n iparam typ, res, Pi_info.typed name)))
         params
         res
 

@@ -154,7 +154,7 @@ let class_header
     | Some (args, sort) ->
         let name_str = Located.value name
         in
-        let params = Array.of_list params
+        let params = Array.of_list (List.rev params)
         and header =
             Inductive.Header.make name_str kind args sort
         in
@@ -217,11 +217,11 @@ let push_params
     (context: Context.t)
     : Context.t
 =
-    Array.fold_left
-        (fun context (name,typ) ->
+    Array.foldi_left
+        (fun context iparam (name,typ) ->
             Context.push_local
                 name
-                (Term.up ntypes typ)
+                (Term.up_from ntypes iparam typ)
                 context)
         context
         params
