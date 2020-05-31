@@ -18,6 +18,9 @@ val sub: 'a array -> int -> int -> 'a array
 val fold_left: ('a -> 'b -> 'a) -> 'a -> 'b array -> 'a
 val fold_right: ('a -> 'b -> 'b) -> 'a array -> 'b -> 'b
 
+val foldi_left: ('a -> int -> 'b -> 'a) -> 'a -> 'b array -> 'a
+val foldi_right: (int -> 'a -> 'b -> 'b) -> 'a array -> 'b -> 'b
+
 
 val first: 'a array -> 'a
 val last:  'a array -> 'a

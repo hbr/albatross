@@ -64,6 +64,33 @@ let fill (n: int) (e: 'a) (arr: 'a array): 'a array =
     arr_new
 
 
+let foldi_left (f: 'a -> int -> 'b -> 'a) (a: 'a) (arr: 'b array): 'a =
+    let len = length arr
+    in
+    let rec fold a i =
+        if i = len then
+            a
+        else
+            fold (f a i (get arr i)) (i + 1)
+    in
+    fold a 0
+
+
+let foldi_right (f: int -> 'a -> 'b -> 'b) (arr: 'a array) (b: 'b): 'b =
+    let len = length arr
+    in
+    let rec fold i b =
+        if i = 0 then
+            b
+        else
+            let i = i - 1 in
+            fold i (f i (get arr i) b)
+    in
+    fold len b
+
+
+
+
 module Monadic (M: MONAD) =
 struct
     let mapi
