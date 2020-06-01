@@ -46,6 +46,12 @@ sig
 
     val read_directory: string -> string array option t
 
+    val open_for_read:  string -> (in_file,  Io.Error.t) result t
+    val open_for_write: string -> (out_file, Io.Error.t) result t
+    val create:         string -> (out_file, Io.Error.t) result t
+    val close_in:  in_file -> unit t
+    val close_out: out_file -> unit t
+
     module Read: functor (W:WRITABLE) ->
     sig
         val read_buffer: in_file -> W.t -> W.t t

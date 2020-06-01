@@ -175,16 +175,14 @@ sig
     val stdin: in_file
     val stdout: out_file
     val stderr: out_file
-    (*val getc: t -> in_file -> char option
-    val getline: t -> in_file -> string option
-    val putc: t -> out_file -> char -> unit
-    val open_for_read: t -> string -> in_file option
-    val open_for_write: t -> string -> out_file option
-    val create: t -> string -> out_file option
-    val close_in:   t -> in_file -> unit
-    val close_out:  t -> out_file -> unit*)
+
     val flush: t -> out_file -> unit
 
+    val open_for_read:  t -> string -> in_file io_result
+    val open_for_write: t -> string -> out_file io_result
+    val create:         t -> string -> out_file io_result
+    val close_in:  t -> in_file  -> unit
+    val close_out: t -> out_file -> unit
 
     module Read: functor (W:WRITABLE) ->
     sig
@@ -206,9 +204,11 @@ struct
       | Write of Unix.file_descr * Buffer.t
       (*| Free of int*)
 
-    type t = {mutable files: file array;
-              mutable first_free: int;
-              line_buf: Buffer.t}
+    type t = {
+        mutable standard_files: file array;
+        buffers: file Pool.t
+    }
+
 
     type in_file = int
     type out_file = int
@@ -225,7 +225,10 @@ struct
         =
         try
             Ok (
+                let nread =
                 Unix.read fd b ofs n
+                in
+                nread
             )
         with Unix.Unix_error (error, _, _) ->
             Error ( Error.make "NOCODE" (Unix.error_message error))
@@ -238,6 +241,7 @@ struct
       with Unix.Unix_error _ ->
         0
 
+
     let readable_file (fd: Unix.file_descr): file =
         Read (
             fd,
@@ -246,49 +250,43 @@ struct
                 (unix_read fd)
                 (fun _ _ _ -> assert false))
 
+
     let writable_file (fd:Unix.file_descr): file =
       Write (fd, Buffer.make
                    buffer_size
                    (fun _ _ _ -> assert false)
                    (unix_write fd))
 
+
     let make (): t =
-      {first_free = -1;
-       files =
-         [| readable_file Unix.stdin;
-            writable_file Unix.stdout;
-            writable_file Unix.stderr |];
-       line_buf =
-         let fr _ _ _ = assert false in
-         let fw _ _ _ = assert false in
-         Buffer.make 200 fr fw
-      }
+        {
+            standard_files =
+                [| readable_file Unix.stdin;
+                   writable_file Unix.stdout;
+                   writable_file Unix.stderr |];
+
+            buffers = Pool.make_empty ();
+        }
 
 
-    (*let put_to_files (fs:t) (file:file): int option =
-      if fs.first_free >= 2 then
-        begin
-          let fd = fs.first_free in
-          match fs.files.(fd) with
-          | Free n ->
-             fs.first_free <- n;
-             fs.files.(fd) <- file;
-             Some fd
-          | _ ->
-             assert false (* Cannot happen, must be free! *)
-        end
-      else
-        begin
-          let nfiles = Array.length fs.files in
-          let files = Array.make (nfiles + 1) file in
-          Array.blit fs.files 0 files 0 nfiles;
-          fs.files <- files;
-          Some nfiles
-        end*)
+    let iter (f: file -> unit) (fs: t): unit =
+        f fs.standard_files.(0);
+        f fs.standard_files.(1);
+        f fs.standard_files.(2);
+        Pool.iter f fs.buffers
 
-    let writable_buffer (fs:t) (fd:int): Buffer.t =
-        assert (fd < Array.length fs.files);
-        match fs.files.(fd) with
+
+    let get_file (fs: t) (fd: int): file =
+        if fd < 3 then
+            fs.standard_files.(fd)
+        else (
+            assert (Pool.has fs.buffers (fd - 3));
+            Pool.elem fs.buffers (fd - 3)
+        )
+
+
+    let writable_buffer (fs: t) (fd: int): Buffer.t =
+        match get_file fs fd with
         | Write (_,b) ->
             b
         | _ ->
@@ -298,82 +296,102 @@ struct
 
 
     let readable_buffer (fs:t) (fd:int): Buffer.t =
-        assert (fd < Array.length fs.files);
-        match fs.files.(fd) with
+        match get_file fs fd with
         | Read (_,b) ->
             b
         | _ ->
             assert false
 
 
-    (*let getc (fs:t) (fd:in_file): char option =
-      Buffer.getc (readable_buffer fs fd)
 
-    let putc (fs:t) (fd:out_file) (c:char): unit =
-      Buffer.putc (writable_buffer fs fd) c
-
-
-    let open_for_read (fs:t) (path:string): in_file option =
-      try
-        put_to_files
-          fs
-          (readable_file (Unix.openfile path [Unix.O_RDONLY] 0o640))
-      with Unix.Unix_error _ ->
-        None
-
-    let open_for_write (fs:t) (path:string): out_file option =
-      try
-        put_to_files
-          fs
-          (writable_file (Unix.openfile path [Unix.O_WRONLY] 0o640))
-      with Unix.Unix_error _ ->
-        None
-
-    let create (fs:t) (path:string): out_file option =
-      try
-        put_to_files
-          fs
-          (writable_file (Unix.openfile path [Unix.O_CREAT] 0o640))
-      with Unix.Unix_error _ ->
-        None*)
-
-    (*let unix_file_descriptor (fs:t) (fd:int): Unix.file_descr =
-      assert (fd < Array.length fs.files);
-      match fs.files.(fd) with
-      | Read (fd,_) -> fd
-      | Write (fd,_) -> fd*)
+    let close (fs: t) (fd: int): unit =
+        assert (3 <= fd); (* standard files cannot be closed. *)
+        assert (Pool.has fs.buffers (fd - 3));
+        let file = Pool.elem fs.buffers (fd - 3) in
+        (
+            match file with
+            | Read (unix_fd, _) ->
+                Unix.close unix_fd
+            | Write (unix_fd, buffer) ->
+                Buffer.flush buffer;
+                Unix.close unix_fd
+        );
+        Pool.release fs.buffers (fd - 3)
 
 
-    (*let close_file (fs:t) (fd:int): unit =
-      assert (fd < Array.length fs.files);
-      match fs.files.(fd) with
-      | Read (fd,_) ->
-         Unix.close fd
-      | Write (fd,b) ->
-         Buffer.flush b;
-         Unix.close fd
-      | Free _ ->
-         ()
 
-    let close_in (fs:t) (fd:in_file): unit =
-      close_file fs fd
+    let open_for_read (fs: t) (path: string): in_file io_result =
+        try
+            let file =
+                  readable_file (Unix.openfile path [Unix.O_RDONLY] 0o640)
+            in
+            let fd =
+                Pool.occupy fs.buffers file
+            in
+            Ok (fd + 3)
 
-    let close_out (fs:t) (fd:out_file): unit =
-      close_file fs fd*)
+        with Unix.Unix_error (error, _, _) ->
+            Error (Error.make "NOCODE" (Unix.error_message error))
+
+
+    let open_for_write (fs: t) (path: string): out_file io_result =
+        try
+            let file =
+                  writable_file (Unix.openfile path [Unix.O_WRONLY] 0o640)
+            in
+            let fd =
+                Pool.occupy fs.buffers file
+            in
+            Ok (fd + 3)
+
+        with Unix.Unix_error (error, _, _) ->
+            Error (Error.make "NOCODE" (Unix.error_message error))
+
+
+    let create (fs: t) (path: string): out_file io_result =
+        try
+            let file =
+                  writable_file (Unix.openfile path [Unix.O_CREAT] 0o640)
+            in
+            let fd =
+                Pool.occupy fs.buffers file
+            in
+            Ok fd
+
+        with Unix.Unix_error (error, _, _) ->
+            Error (Error.make "NOCODE" (Unix.error_message error))
+
+
+    let close_in (fs: t) (fd: in_file): unit =
+        close fs fd
+
+
+    let close_out (fs: t) (fd: out_file): unit =
+        close fs fd
+
+
+
 
 
     let flush (fs:t) (fd:out_file) : unit =
-      assert (fd < Array.length fs.files);
-      match fs.files.(fd) with
-      | Write (_,b) ->
-         Buffer.flush b
-      | _ ->
-           ()
+        match get_file fs fd with
+        | Write (_, b) ->
+            Buffer.flush b
+        | _ ->
+            ()
 
-    let flush_all (fs:t): unit =
-      for i = 0 to Array.length fs.files - 1 do
-        flush fs i
-      done
+
+
+    let flush_all (fs: t): unit =
+        iter
+            (function
+                | Write (_, b) ->
+                    Buffer.flush b
+                | _ ->
+                    ())
+            fs
+
+
 
     let stdin: in_file = 0
 
@@ -381,48 +399,6 @@ struct
 
     let stderr: out_file = 2
 
-    (*let stdin_buffer (fs:t): Buffer.t =
-      readable_buffer fs stdin
-
-
-    let stdout_buffer (fs:t): Buffer.t =
-      writable_buffer fs stdout
-
-
-    let stderr_buffer (fs:t): Buffer.t =
-      writable_buffer fs stderr
-
-
-    let getline (fs:t) (fd:in_file): string option =
-      assert (fd < Array.length fs.files);
-      let b = readable_buffer fs fd in
-      Buffer.reset fs.line_buf;
-      let content () = Some (Buffer.content fs.line_buf) in
-      let len = Buffer.size fs.line_buf
-      in
-      let rec read (i:int): string option =
-        if i = len then
-          content ()
-        else
-          begin
-            match Buffer.getc b with
-            | None ->
-               if i = 0 then
-                 None
-               else
-                 content ()
-            | Some c ->
-               if c = '\n' then
-                 content ()
-               else
-                 begin
-                   Buffer.putc fs.line_buf c;
-                   read (i+1)
-                 end
-          end
-      in
-      read 0
-     *)
 
 
     module Read (W: WRITABLE) =
@@ -430,11 +406,9 @@ struct
         module BR = Buffer.Read (W)
 
         let read_buffer (fs: t) (fd: in_file) (w: W.t): W.t =
-            assert (fd < Array.length fs.files);
             BR.read (readable_buffer fs fd) w
 
         let read (fs: t) (fd: in_file) (w: W.t): (W.t, W.t * Error.t) result =
-            assert (fd < Array.length fs.files);
             let b =
                 readable_buffer fs fd
             in
@@ -468,11 +442,10 @@ struct
         module BW = Buffer.Write (R)
 
         let write_buffer (fs:t) (fd:out_file) (r:R.t): R.t =
-            assert (fd < Array.length fs.files);
             BW.write (writable_buffer fs fd) r
 
+
         let write (fs:t) (fd:out_file) (r:R.t): R.t =
-            assert (fd < Array.length fs.files);
             let b = writable_buffer fs fd in
             let rec write r =
                 let more = R.has_more r in
@@ -557,6 +530,8 @@ struct
       File_system.flush_all fs;
       Stdlib.exit code
 
+
+
     let execute (p:unit t): unit =
       let fs = File_system.make ()
       in
@@ -587,6 +562,8 @@ struct
 
     let path_delimiter: char =
       if Sys.win32 then ';' else ':'
+
+
 
 
     let read_directory (path:string): string array option t =
@@ -640,6 +617,41 @@ struct
 
 
 
+
+
+    let open_for_read (path: string): in_file io_result t =
+        fun fs k ->
+        k
+            (File_system.open_for_read fs path)
+            fs
+
+
+    let open_for_write (path: string): out_file io_result t =
+        fun fs k ->
+        k
+            (File_system.open_for_write fs path)
+            fs
+
+
+    let create (path: string): out_file io_result t =
+        fun fs k ->
+        k
+            (File_system.create fs path)
+            fs
+
+
+    let close_in (fd: in_file): unit t =
+        fun fs k ->
+        k
+            (File_system.close_in fs fd)
+            fs
+
+
+    let close_out (fd: out_file): unit t =
+        fun fs k ->
+        k
+            (File_system.close_out fs fd)
+            fs
 
 
     module Read (W: WRITABLE) =

@@ -80,11 +80,17 @@ module type SIG =
         module In:
         sig
             type fd
+            val open_: string -> (fd, Error.t) result t
+            val close: fd -> unit t
         end
 
         module Out:
         sig
             type fd
+            val open_:  string -> (fd, Error.t) result t
+            val create: string -> (fd, Error.t) result t
+            val close: fd -> unit t
+
             val putc: char -> fd -> unit t
             val substring: string -> int -> int -> fd -> unit t
             val string: string -> fd -> unit t

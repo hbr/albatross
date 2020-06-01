@@ -36,6 +36,13 @@ sig
 
     val read_directory: string -> string array option t
 
+    val open_for_read:  string -> (in_file,  Io.Error.t) result t
+    val open_for_write: string -> (out_file, Io.Error.t) result t
+    val create:         string -> (out_file, Io.Error.t) result t
+    val close_in:  in_file -> unit t
+    val close_out: out_file -> unit t
+
+
     module Read: functor (W: WRITABLE) ->
     sig
         val read_buffer: in_file -> W.t -> W.t t
@@ -97,41 +104,6 @@ module Make (Base: SIG): Io.SIG =
       end
 
 
-    (*let read_file
-          (path:string) (cannot_open:'a t) (read:in_file -> 'a t)
-        : 'a t =
-      open_for_read path >>= fun fd ->
-      match fd with
-      | None ->
-         cannot_open
-      | Some fd ->
-         read fd >>= fun a ->
-         close_in fd >>= fun _ ->
-         return a
-
-    let write_file
-          (path:string) (cannot_open:'a t) (write:out_file -> 'a t)
-        : 'a t =
-      open_for_write path >>= fun fd ->
-      match fd with
-      | None ->
-         cannot_open
-      | Some fd ->
-         write fd >>= fun a ->
-         close_out fd >>= fun _ ->
-         return a
-
-    let create_file
-          (path:string) (cannot_create:'a t) (write:out_file -> 'a t): 'a t =
-      create path >>= fun fd ->
-      match fd with
-      | None ->
-         cannot_create
-      | Some fd ->
-         write fd >>= fun a ->
-         close_out fd >>= fun _ ->
-         return a
-     *)
 
     module File =
     struct
@@ -139,6 +111,12 @@ module Make (Base: SIG): Io.SIG =
         module In =
         struct
             type fd = in_file
+
+            let open_ (name: string): (fd, Io.Error.t) result t =
+                Base.open_for_read name
+
+            let close (fd: in_file): unit t =
+                Base.close_in fd
         end
 
 
@@ -146,6 +124,15 @@ module Make (Base: SIG): Io.SIG =
         struct
             type fd =
                 out_file
+
+            let open_ (name: string): (fd, Io.Error.t) result t =
+                Base.open_for_write name
+
+            let create (name: string): (fd, Io.Error.t) result t =
+                Base.create name
+
+            let close (fd: out_file): unit t =
+                Base.close_out fd
 
             let substring
                 (s: string)
@@ -198,27 +185,9 @@ module Make (Base: SIG): Io.SIG =
 
         module Read (W: WRITABLE) =
             Base.Read (W)
-
-        (*module Read (W: WRITABLE) =
-        struct
-            module Read0 = Base.Read (W)
-
-            let read_buffer (fd: In.fd) (w: W.t): W.t t =
-                Read0.read_buffer fd w
-
-            let read(fd: In.fd) (w: W.t): W.t t =
-                Read0.read fd w
-        end*)
     end (* File *)
 
 
-(*
-    let getc_in: char option t =
-      getc stdin
-
-    let get_line_in: string option t =
-      get_line stdin
- *)
 
 
     module Stdout =
@@ -258,4 +227,3 @@ module Make (Base: SIG): Io.SIG =
         let fill n c = Out.fill n c stderr
       end
   end
-

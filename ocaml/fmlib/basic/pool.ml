@@ -38,6 +38,22 @@ let find (p:'a t) (i:int): int =
   fnd i
 
 
+
+
+let iter (f: 'a -> unit) (p: 'a t): unit =
+    let rec iter i =
+        if i = capacity p then
+            ()
+        else (
+            f (elem p i);
+            iter (find p (i + 1))
+        )
+    in
+    iter (find p 0)
+
+
+
+
 let occupy (p:'a t) (a:'a): int =
   match p.first_free with
   | None ->
