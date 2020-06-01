@@ -42,7 +42,7 @@ struct
         String_printer.run (Pretty_printer.run 0 70 70 p)
 
     let standard_context: Context.t =
-        Context.standard ()
+        Standard_context.make ()
 
 
     let parse (input: string): (Expression.t, string) result =

@@ -40,7 +40,7 @@ struct
 
             parser = Parser.(make (source_file true));
 
-            context = Context.standard ();
+            context = Standard_context.make ();
 
             values = [];
 

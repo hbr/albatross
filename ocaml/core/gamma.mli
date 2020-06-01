@@ -38,7 +38,8 @@ val entry: int -> t -> entry
 val add_axiom: string -> Term.typ -> t -> t
 
 
-val add_builtin_type: string -> string -> Term.typ -> t -> t
+val add_builtin_type:     string -> string -> Term.typ -> t -> t
+val add_builtin_function: string -> string -> Term.typ -> t -> t
 
 
 
@@ -65,8 +66,6 @@ val variable_at_level: int -> t -> Term.t
 val definition_term: int -> t -> Term.t option
 
 val inductive_at_level: int -> t -> Inductive.t option
-
-val standard: unit -> t
 
 val compute: Term.t -> t -> Term.t
 

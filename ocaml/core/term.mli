@@ -16,6 +16,7 @@ sig
     val int_plus: t
     val int_minus: t
     val int_times: t
+    val int_negate: t
     val string_concat: t
     val apply: t -> t -> t
 

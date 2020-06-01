@@ -23,7 +23,6 @@ module Definition_parser =
 
 
 let add_definition (src: string) (c: Context.t): Context.t =
-    Printf.printf "add definition \"%s\"\n" src;
     let open Definition_parser in
     let p = run (global_definition ()) src in
     assert (has_ended p);
@@ -43,7 +42,6 @@ let add_definition (src: string) (c: Context.t): Context.t =
 
 
 let add_inductive (src: string) (c: Context.t): Context.t =
-    Printf.printf "add inductive \"%s\"\n" src;
     let open Inductive_parser in
     let p = run (inductive_family ()) src in
     assert (has_ended p);
@@ -60,10 +58,10 @@ let add_inductive (src: string) (c: Context.t): Context.t =
 
 
 let add_builtin
+    (fun_flag: bool)
     (descr: string) (name: string) (src: string) (c: Context.t):
     Context.t
 =
-    Printf.printf "add builtin %s \"%s\"\n" descr src;
     let open Expression_parser in
     let p = run (expression ()) src in
     assert (has_ended p);
@@ -76,7 +74,10 @@ let add_builtin
         | Error _ ->
             assert false
         | Ok (typ, _) ->
-            Context.add_builtin_type descr name typ c
+            if fun_flag then
+                Context.add_builtin_function descr name typ c
+            else
+                Context.add_builtin_type descr name typ c
 
 
 
@@ -106,6 +107,9 @@ let add_basics (c: Context.t): Context.t =
     c
     |>
     add_definition
+        "identity (A: Any) (a: A): A := a"
+    |>
+    add_definition
         "(|>) (A: Any) (a: A) (B: Any) (f: A -> B): B := f a"
     |>
     add_definition
@@ -117,19 +121,21 @@ let add_basics (c: Context.t): Context.t =
 let add_builtins (c: Context.t): Context.t =
     c
     |>
-    add_builtin "int_type" "Int" "Any"
+    add_builtin false "int_type" "Int" "Any"
     |>
-    add_builtin "int_plus" "+" "Int -> Int -> Int"
+    add_builtin true  "int_plus" "+" "Int -> Int -> Int"
     |>
-    add_builtin "int_minus" "-" "Int -> Int -> Int"
+    add_builtin true  "int_minus" "-" "Int -> Int -> Int"
     |>
-    add_builtin "int_times" "*" "Int -> Int -> Int"
+    add_builtin true  "int_negate" "-" "Int -> Int"
     |>
-    add_builtin "string_type" "String" "Any"
+    add_builtin true "int_times" "*" "Int -> Int -> Int"
     |>
-    add_builtin "string_concat" "+" "String -> String -> String"
+    add_builtin false "string_type" "String" "Any"
     |>
-    add_builtin "character_type" "Character" "Any"
+    add_builtin true  "string_concat" "+" "String -> String -> String"
+    |>
+    add_builtin false "character_type" "Character" "Any"
 
 
 

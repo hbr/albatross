@@ -150,7 +150,7 @@ struct
 
         | Ambiguous types ->
             wrap_words
-                "This term is ambigous. It can have the following types."
+                "This term is ambiguous. It can have the following types."
             <+> cut <+> cut
             <+> type_list types
             <+> cut <+> cut

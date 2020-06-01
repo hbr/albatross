@@ -67,12 +67,6 @@ let add_new_globals (gamma: Gamma.t) (c: t): t =
 
 
 
-let standard (): t =
-    add_new_globals
-        (Gamma.standard ())
-        empty
-
-
 let compute (t: Term.t) (c: t): Term.t =
     Gamma.compute t c.gamma
 
@@ -126,6 +120,23 @@ let add_builtin_type
     {
         gamma =
             Gamma.add_builtin_type descr name typ c.gamma;
+
+        map =
+            Name_map.add_global_strict name typ c.gamma c.map;
+    }
+
+
+
+let add_builtin_function
+    (descr: string)
+    (name: string)
+    (typ: Term.typ)
+    (c: t)
+    : t
+=
+    {
+        gamma =
+            Gamma.add_builtin_function descr name typ c.gamma;
 
         map =
             Name_map.add_global_strict name typ c.gamma c.map;

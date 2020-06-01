@@ -12,7 +12,6 @@ val level_of_index: int -> t -> int
 
 
 val empty: t
-val standard: unit -> t
 
 val find_name: string -> t -> int list
 
@@ -24,7 +23,8 @@ val can_add_global: string -> Term.typ -> t -> bool
 
 val add_axiom: string -> Term.typ -> t -> t
 
-val add_builtin_type: string -> string -> Term.typ -> t -> t
+val add_builtin_type:     string -> string -> Term.typ -> t -> t
+val add_builtin_function: string -> string -> Term.typ -> t -> t
 
 val add_definition: string -> Term.typ -> Term.t -> t -> (t, int) result
 

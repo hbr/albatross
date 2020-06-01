@@ -241,7 +241,3 @@ let is_valid_context (gamma: Gamma.t): bool =
                                 && check_entry (i + 1)
     in
     check_entry 0
-
-
-let%test _ =
-    is_valid_context (Gamma.standard ())

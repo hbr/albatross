@@ -73,8 +73,6 @@ let add_inductive
     let open Result in
     Build_inductive.build inds c
     >>= fun ind ->
-    Printf.printf "%s\n"
-        (Print_inductive.string_of_inductive ind (Context.gamma c));
     Ok (Context.add_inductive ind c)
 
 

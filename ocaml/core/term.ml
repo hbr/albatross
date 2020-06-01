@@ -52,6 +52,17 @@ struct
         )
 
 
+    let int_unary (f:int -> int): t =
+      Unary
+        (fun a ->
+          match a with
+          | Int a ->
+             Int (f a)
+          | _ ->
+             assert false (* Illegal call *)
+        )
+
+
     let string_binary (f:string -> string -> string): t =
       Binary
         (fun a b ->
@@ -69,6 +80,10 @@ struct
 
     let int_minus: t =
       int_binary (-)
+
+
+    let int_negate: t =
+      int_unary (~-)
 
 
     let int_times: t =

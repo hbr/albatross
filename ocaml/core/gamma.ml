@@ -1,9 +1,23 @@
 open Fmlib
+open Common
 
 
 module Pi_info = Term.Pi_info
 
 module Lambda_info = Term.Lambda_info
+
+
+let builtin_functions: Term.Value.t String_map.t =
+    let open String_map in
+    empty
+    |> add "int_plus"      Term.Value.int_plus
+    |> add "int_minus"     Term.Value.int_minus
+    |> add "int_times"     Term.Value.int_times
+    |> add "int_negate"    Term.Value.int_negate
+    |> add "string_concat" Term.Value.string_concat
+
+let _ =
+    String_map.mem "int_plus" builtin_functions
 
 
 type definition =
@@ -26,6 +40,7 @@ type entry = {
 type t = {
         entries: entry Sequence.t;
         inductives: (int * Inductive.t) Sequence.t;
+        builtin_types: int String_map.t;
 }
 
 
@@ -33,6 +48,7 @@ let empty: t =
     {
         entries = Sequence.empty;
         inductives = Sequence.empty;
+        builtin_types = String_map.empty;
     }
 
 
@@ -127,17 +143,6 @@ let add_definition
 
 
 
-let add_entry (name: string) (typ:Term.typ*int) (def:definition) (c:t): t =
-    let typ,n = typ
-    and cnt = count c
-    in
-    assert (n <= cnt);
-    let typ = Term.up (cnt - n) typ
-    in
-    push name typ def c
-
-
-
 let add_axiom (name: string) (typ: Term.typ) (c: t): t =
     push
         name
@@ -148,10 +153,26 @@ let add_axiom (name: string) (typ: Term.typ) (c: t): t =
 
 
 let add_builtin_type (descr: string) (name: string) (typ: Term.typ) (c: t): t =
+    let cnt = count c in
     push
         name
         typ
         (Builtin_type descr)
+        {c with
+            builtin_types =
+                String_map.add descr cnt c.builtin_types}
+
+
+
+let add_builtin_function
+    (descr: string) (name: string) (typ: Term.typ) (c: t): t
+=
+    let value = String_map.find descr builtin_functions
+    in
+    push
+        name
+        typ
+        (Builtin (descr, value))
         c
 
 
@@ -213,242 +234,30 @@ let inductive_at_level (level: int) (c: t): Inductive.t option =
 
 
 
-let int_level    = 0
-let char_level   = 1
-let string_level = 2
-let eq_level     = 8
-
-
-let proposition_start_level = 12
-let true_offset    = 0
-let false_offset   = 1
-let impl_offset    = 2
-let exfalso_offset = 3
-let leibniz_offset = 4
-
-let true_level     = proposition_start_level + true_offset
-let false_level    = proposition_start_level + false_offset
-let impl_level     = proposition_start_level + impl_offset
-let exfalso_level  = proposition_start_level + exfalso_offset
-let leibniz_level  = proposition_start_level + leibniz_offset
-let _ =
-    true_level
-    , false_level
-    , impl_level
-    , exfalso_level
-    , leibniz_level
-
-
-let binary_type (level:int): Term.typ * int =
-  Pi (Variable 0,
-      Pi (Variable 1,
-          Variable 2,
-          Pi_info.arrow),
-      Pi_info.arrow),
-  (level + 1)
 
 
 let int_type (c:t) =
-  Term.Variable (index_of_level int_level c)
-
-
-let char_type (c:t) =
-  Term.Variable (index_of_level char_level c)
-
-
-let string_type (c:t) =
-  Term.Variable (index_of_level string_level c)
-
-
-let standard (): t =
-  (* Standard context. *)
-  let open Term
-  in
-  empty
-
-  |> (* 0 *) add_entry "Int" (Term.any ,0) (Builtin_type "int_type")
-
-  |> (* 1 *) add_entry "Character" (Term.any, 0) (Builtin_type "char_type")
-
-  |> (* 2 *) add_entry "String" (Term.any, 0) (Builtin_type "string_type")
-
-  |> (* 3 *) add_entry
-       "+"
-       (binary_type int_level)
-       (Builtin ("int_plus", Term.Value.int_plus))
-
-  |> (* 4 *) add_entry
-       "-"
-       (binary_type int_level)
-       (Builtin ("int_minus", Term.Value.int_minus))
-
-  |> (* 5 *) add_entry
-       "*"
-       (binary_type int_level)
-       (Builtin ("int_times", Term.Value.int_times))
-
-  |> (* 6 *) add_entry
-       "+"
-       (binary_type string_level)
-       (Builtin ("string_concat", Term.Value.string_concat))
-
-  |> (* 7 *) add_entry
-       (* List: Any -> Any *)
-       "List"
-       (Term.(Pi (any, any, Pi_info.arrow)), 0)
-       Axiom
-
-  |> (* 8 *) add_entry (* 8 *)
-       (* (=) (A: Any): A -> A -> Proposition *)
-       "="
-       (Term.(
-          Pi (any,
-              Pi (Variable 0,
-                  (Pi (Variable 1,
-                       proposition,
-                       Pi_info.arrow)),
-                  Pi_info.arrow),
-              Pi_info.typed "A")),
-        0)
-       Axiom
-
-  |> (* 9 *) add_entry
-       (* identity: all (A: Any): A -> A :=
-            \ A x := x *)
-       "identity"
-       (Term.(
-          Pi (any,
-              Pi (Variable 0,
-                  Variable 1,
-                  Pi_info.arrow),
-              Pi_info.typed "A")),
-        0)
-       (Definition
-          (Term.(
-             Lambda (any,
-                     Lambda (Variable 0,
-                             Variable 0,
-                             Lambda_info.typed "x"),
-                     Lambda_info.typed "A"))))
-
-    |> (* 10 *) (* (|>) (A: Any) (a: A) (B: Any) (f: A -> B): B := f a *)
-        (let biga = Variable 0
-         and a    = Variable 1
-         and bigb = Variable 2
-         and f    = Variable 3
-         in
-         let args = ["A", any;
-                     "a", biga;
-                     "B", any;
-                     "f", arrow biga bigb]
-         in
-         let typ = product_in args bigb
-         and def = lambda_in args (application f a)
-         in
-         add_entry
-            "|>"
-            (to_index 0 typ, 0)
-            (Definition (to_index 0 def))
-        )
-
-    |> (* 11 *) (* (<|) (A: Any) (B: Any) (f: A -> B) (a: A): B := f a *)
-        (let biga = Variable 0
-         and bigb = Variable 1
-         and f    = Variable 2
-         and a    = Variable 3
-         in
-         let args = ["A", any;
-                     "B", any;
-                     "f", arrow biga bigb;
-                     "a", biga]
-         in
-         let typ = product_in args bigb
-         and def = lambda_in args (application f a)
-         in
-         add_entry
-            "<|"
-            (to_index 0 typ, 0)
-            (Definition (to_index 0 def))
-        )
-
-    |> (* 12 *) add_entry
-        (* true: Proposition *)
-        "true"
-        (Term.proposition, 0)
-        Axiom
-
-    |> (* 13 *) add_entry
-        (* false: Proposition *)
-        "false"
-        (Term.proposition, 0)
-        Axiom
-
-    |> (* 14 *) (* (=>): all (a b: Proposition): Proposition := a -> b *)
-       (let typ =
-            product "_"
-                proposition
-                (product "_" proposition proposition)
-        and def =
-            let a = Variable 0
-            and b = Variable 1 in
-            to_index 0
-                (lambda "a" proposition
-                   (lambda "b" proposition
-                        (arrow a b)))
-        in
-        add_entry
-            "=>" (typ,0) (Definition def)
-        )
-
-    |> (* 15 *)
-       (* ex_falso: all (a: Proposition): false => a *)
-    (
-        let n =
-            proposition_start_level + exfalso_offset
-        in
-        let typ =
-            product
-                "a"
-                proposition
-                (binary
-                    (Variable false_level)
-                    (Variable impl_level)
-                    (Variable n))
-        in
-        add_entry "ex_falso" (to_index n typ, n) Axiom
+    Term.Variable (
+        index_of_level
+            (String_map.find "int_type" c.builtin_types)
+            c
     )
 
 
+let char_type (c:t) =
+    Term.Variable (
+        index_of_level
+            (String_map.find "character_type" c.builtin_types)
+            c
+    )
 
 
-     (* 16 *)
-     (* leibniz (A: Any) (f: A -> Proposition)
-               (a b: A)
-               : a = b => f a => f b *)
-    |>  (let n = eq_level + 1 in
-         let biga = Variable (n + 0)
-         and f    = Variable (n + 1)
-         and a    = Variable (n + 2)
-         and b    = Variable (n + 3)
-         and eq   = Variable eq_level
-         in
-         let args = ["A", any;
-                     "f", arrow biga proposition;
-                     "a", biga;
-                     "b", biga;
-                     "eq", binary
-                            a
-                            (implicit_application eq biga)
-                            b;
-                     "fa", application f a]
-         in
-         let typ = product_in args (application f b)
-         in
-         add_entry
-            "leibniz" (to_index n typ, n)
-            Axiom
-        )
-
+let string_type (c:t) =
+    Term.Variable (
+        index_of_level
+            (String_map.find "string_type" c.builtin_types)
+            c
+    )
 
 
 let type_of_literal (v: Term.Value.t) (c: t): Term.typ =

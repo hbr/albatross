@@ -20,7 +20,7 @@ struct
         let init: t =
             Some {
                 input = "";
-                context = Context.standard ();
+                context = Standard_context.make ();
             }
 
         let exit: t = None
@@ -346,7 +346,7 @@ struct
                         Pretty.run
                             (build_and_compute
                                 input
-                                (Context.standard ())
+                                (Standard_context.make ())
                                 expression
                                 false)
             )

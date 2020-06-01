@@ -16,7 +16,7 @@ module Error_print = Build_problem.Print (Pretty_printer)
 
 
 let standard_context: Context.t =
-    Context.standard ()
+    Standard_context.make ()
 
 
 
@@ -93,7 +93,7 @@ let%test _ =
     match build_expression "(|>)" with
     | Ok (term, typ) ->
         string_of_term_type term typ
-        = "(|>): all (A: Any) (a: A) (B: Any) (f: A -> B): B"
+        = "(|>): all (A: Any): A -> (all (B: Any): (A -> B) -> B)"
     | _ ->
         false
 
