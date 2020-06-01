@@ -28,8 +28,8 @@ let addition          = (160,   Left)
 let multiplication    = (180,   Left)
 let exponentiation    = (200,   Right)
 
-let unknown           = (100,  Left)
-let application       = (200,  Left)
+let unknown           = (300,  Left)
+let application       = (400,  Left)
 
 (* Precedences:
 
@@ -100,15 +100,15 @@ let is_keyword_operator (op: string): bool =
 
 
 
-let of_string (op:string): t =
-  match
-    String_map.maybe_find op map
-  with
-  | None ->
-     unknown
+let of_string (op: string): t =
+    match
+        String_map.maybe_find op map
+    with
+    | None ->
+        unknown
 
-  | Some d ->
-     d
+    | Some d ->
+        d
 
 
 
