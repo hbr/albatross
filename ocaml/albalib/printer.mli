@@ -30,6 +30,6 @@ sig
     *)
 
     val print_source_lines:
-        string Segmented_array.t -> range -> int list -> PP.t
+        string Sequence.t -> range -> int list -> PP.t
 end
 

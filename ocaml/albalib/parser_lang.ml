@@ -299,7 +299,7 @@ module type SIG =
         sig
             val print_with_source: string -> parser -> PP.t
             val print_with_source_lines:
-                string Segmented_array.t -> parser -> PP.t
+                string Sequence.t -> parser -> PP.t
         end
     end
 
@@ -1240,7 +1240,7 @@ struct
 
 
         let print_with_source_lines
-            (lines: string Segmented_array.t)
+            (lines: string Sequence.t)
             (p: parser)
             : PP.t
             =

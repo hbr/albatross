@@ -66,7 +66,7 @@ struct
     let build (input: string) (evaluate: bool): (string, string) result =
         let open Result in
         parse input >>= fun exp ->
-        match Builder.build exp standard_context with
+        match Build_expression.build exp standard_context with
         | Ok (term, typ) ->
             let module P = Context.Pretty (Pretty_printer) in
             Ok (
@@ -86,7 +86,7 @@ struct
                     )
             )
         | Error (range, description) ->
-            let module PP = Builder.Print (Pretty_printer) in
+            let module PP =  Build_problem.Print (Pretty_printer) in
             let module PP0 = Printer.Make (Pretty_printer) in
             Error (
                 string_of_printer

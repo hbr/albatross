@@ -587,14 +587,13 @@ struct
           (e: Expect_msg.t)
         : string t
       =
-      let module Arr = Segmented_array in
       let rec rest arr =
         (expect inner e >>= fun c ->
-         rest (Arr.push c arr))
+         rest (Sequence.push c arr))
         <|> return arr
       in
       expect start e >>= fun c ->
-      map Arr.to_string (rest (Arr.singleton c))
+      map Sequence.to_string (rest (Sequence.singleton c))
 
 
     let whitespace_char (e: Expect_msg.t): char t =

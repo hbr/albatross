@@ -178,7 +178,7 @@ struct
 
 
     let print_source_lines
-        (lines: string Segmented_array.t)
+        (lines: string Sequence.t)
         ((pos1, pos2): range)
         (error_tabs: int list)
         : PP.t
@@ -197,7 +197,7 @@ struct
         in
         assert (start_line <= end_line);
         assert (start_line < end_line || start_col < end_col);
-        assert (end_line < Segmented_array.length lines);
+        assert (end_line < Sequence.length lines);
         let number_width =
             String.length (string_of_int (end_line + 1))
         in
@@ -213,7 +213,7 @@ struct
                     print_line
                         number_width
                         i
-                        (Segmented_array.elem i lines))
+                        (Sequence.elem i lines))
                 first (last + 1)
         in
         print_lines start_line0 (start_line - 1)

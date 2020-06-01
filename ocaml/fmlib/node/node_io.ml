@@ -359,7 +359,7 @@ struct
                         match res with
                         | Ok n ->
                             if n = 0 then
-                                return (Ok (W.putend w))
+                                return (Ok (W.put_end w))
                             else (
                                 assert (not (Io_buffer.is_empty buf));
                                 read w

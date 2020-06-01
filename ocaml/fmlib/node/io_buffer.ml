@@ -110,7 +110,7 @@ module Read (W:WRITABLE) =
           | None ->
              w
           | Some c ->
-             next @@ W.putc w c
+             next @@ W.put_character w c
         else
           w
       in

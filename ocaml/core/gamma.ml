@@ -5,8 +5,6 @@ module Pi_info = Term.Pi_info
 
 module Lambda_info = Term.Lambda_info
 
-module Sequence = Segmented_array
-
 
 type definition =
   | Axiom

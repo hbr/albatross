@@ -325,7 +325,7 @@ struct
 
 
     let print_with_source_lines
-        (lines: string Segmented_array.t)
+        (lines: string Sequence.t)
         ((range, desc): t)
         : P.t
         =

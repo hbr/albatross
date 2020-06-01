@@ -46,6 +46,6 @@ sig
     val print_with_source: string -> t -> P.t
 
     val print_with_source_lines:
-        string Segmented_array.t -> t -> P.t
+        string Sequence.t -> t -> P.t
 end
 

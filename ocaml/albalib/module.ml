@@ -10,7 +10,7 @@ module Parser = Parser_lang.Make (Unit)
 module Compiler =
 struct
     type lines =
-        string Segmented_array.t
+        string Sequence.t
 
     type error =
         | Parse_error
@@ -32,7 +32,7 @@ struct
 
     let make _: t =
         {
-            lines = Segmented_array.empty;
+            lines = Sequence.empty;
 
             line  = "";
 
@@ -114,7 +114,7 @@ struct
     let add_character (c: char) (compiler: t) : string * lines =
         if c = '\n' then
             "",
-            Segmented_array.push compiler.line compiler.lines
+            Sequence.push compiler.line compiler.lines
         else
             compiler.line ^ String.one c,
             compiler.lines
@@ -196,7 +196,7 @@ struct
     struct
         let print_error (compiler: t): Pretty.t =
             let lines =
-                Segmented_array.push compiler.line compiler.lines
+                Sequence.push compiler.line compiler.lines
             in
             match compiler.error with
             | None ->
