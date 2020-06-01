@@ -323,6 +323,12 @@ struct
             else
                 fail
 
+        | Appl (Variable f, arg, _), _  ->
+            setF f arg req
+
+        | _, Appl (Variable f, arg, _ ) ->
+            setF f arg act
+
         | Appl (f_act, arg_act, _ ), Appl (f_req, arg_req, _) ->
             unify0 f_act f_req false ()
             >>=
@@ -357,12 +363,6 @@ struct
                         set j act false ()
                     else
                         assert false (* cannot happen, illegal path *)
-
-        | Appl (Variable f, arg, _), _  ->
-            setF f arg req
-
-        | _, Appl (Variable f, arg, _ ) ->
-            setF f arg act
 
         | Variable i, _ ->
             set_if_hole i req ()
