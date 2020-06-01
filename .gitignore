@@ -1,6 +1,7 @@
 todo.txt
 todo.md
 *_draft.*
+.merlin
 gmon.out
 gmon.txt
 *.log
