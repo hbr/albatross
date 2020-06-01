@@ -4,6 +4,8 @@ open Alba_core
 module Command_parser =
     Parser_lang.Make (Parser_lang.Command)
 
+module Located = Character_parser.Located
+
 
 module Make (Io: Io.SIG) =
 struct
@@ -12,18 +14,30 @@ struct
     struct
         type entry = {
             input: string;
+            context_loaded: Context.t;
             context: Context.t;
+            loaded_file: string option
         }
 
         type t = entry option
 
         let init: t =
+            let context = Standard_context.make () in
             Some {
                 input = "";
-                context = Standard_context.make ();
+                context_loaded = context;
+                context;
+                loaded_file = None;
             }
 
+
+        let clear: t -> t =
+            Option.map
+                (fun entry -> {entry with context = entry.context_loaded})
+
+
         let exit: t = None
+
 
         let prompt (state: t): string option =
             Option.map
@@ -33,6 +47,7 @@ struct
                     else
                         "| ")
                 state
+
 
         let add (line: string) (state: t): t =
             Option.map
@@ -50,9 +65,20 @@ struct
 
         let put_context (context: Context.t) (state: t): t =
             Option.map
-                (fun _ ->
-                    {context; input = ""})
+                (fun entry ->
+                    {entry with context; input = ""})
                 state
+
+        let put_loaded (name: string) (context: Context.t): t -> t =
+            Option.map
+                (fun _ ->
+                    {
+                        input = "";
+                        context;
+                        context_loaded = context;
+                        loaded_file = Some name;
+                    }
+                )
 
 
         let clear_input (state: t): t =
@@ -207,7 +233,24 @@ struct
                                 false))
 
                 | Parser_lang.Command.Clear ->
-                    Io.return Cli_state.init
+                    Io.return (Cli_state.clear state)
+
+                | Parser_lang.Command.Load file ->
+                    let module Compile = Module.Make (Io) in
+                    Io.(
+                        Compile.compile file >>= function
+                        | None ->
+                            Io.return (Cli_state.clear_input state)
+                        | Some context ->
+                            Io.return
+                                (Cli_state.put_loaded
+                                    (Located.value file)
+                                    context
+                                    state)
+                    )
+
+                | Parser_lang.Command.Reload ->
+                    assert false (* nyi *)
 
                 | Parser_lang.Command.Define def ->
                     add_definition def state

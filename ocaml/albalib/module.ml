@@ -4,6 +4,7 @@ open Alba_core
 
 
 module Parser = Parser_lang.Make (Unit)
+module Located = Character_parser.Located
 
 
 
@@ -30,7 +31,7 @@ struct
     }
 
 
-    let make _: t =
+    let make_from_context (context: Context.t): t =
         {
             lines = Sequence.empty;
 
@@ -40,12 +41,20 @@ struct
 
             parser = Parser.(make (source_file true));
 
-            context = Standard_context.make ();
+            context;
 
             values = [];
 
             error = None;
         }
+
+
+    let make _: t =
+        make_from_context (Standard_context.make ())
+
+
+    let context (c: t): Context.t =
+        c.context
 
 
     let needs_more (compiler: t): bool =
@@ -251,6 +260,46 @@ struct
                 (run 0 80 80 pr)
     end (* Pretty *)
 
+
+
+    let compile (file: string Located.t): Context.t option Io.t =
+        let name = Located.value file
+        in
+        let open Io in
+        File.In.open_ name
+        >>= function
+        | Error error ->
+            Pretty.(run
+                (
+                    string "Cannot open file '" <+> string name <+> char '\''
+                    <+> cut <+> cut
+                    <+> string (Fmlib.Io.Error.message error)
+                    <+> cut <+> cut
+                )
+            )
+            >>= fun _ ->
+            return None
+
+        | Ok fd ->
+            let module Reader = File.Read (Compiler) in
+            Reader.read fd (Compiler.make ())
+            >>= fun io_result ->
+            File.In.close fd
+            >>= fun _ ->
+            match io_result with
+            | Error (_, error) ->
+                let module Io_error = Fmlib.Io.Error in
+                    Pretty.(run (string (Io_error.message error) <+> cut))
+                    >>= fun _ ->
+                    return None
+
+            | Ok compiler ->
+                let module Print = Compiler.Print (Pretty) in
+                if Compiler.has_succeeded compiler then
+                    return (Some (Compiler.context compiler))
+                else
+                    Pretty.run (Print.print_error compiler)
+                    >>= fun _ -> return None
 
 
     let run _: unit Io.t =

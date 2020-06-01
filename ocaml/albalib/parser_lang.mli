@@ -44,6 +44,8 @@ sig
         | Type_check of Expression.t
         | Define of Expression.definition
         | Clear
+        | Load of string located
+        | Reload
         | Exit
         | Do_nothing
 end
