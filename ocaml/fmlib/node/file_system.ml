@@ -10,6 +10,11 @@ object
 end
 
 
+let make_io_error (js_error: error Js.t): Fmlib.Io.Error.t =
+    Fmlib.Io.Error.make
+        (to_string js_error##.code)
+        (to_string js_error##.message)
+
 
 class type stats =
     object
@@ -78,6 +83,8 @@ class type fs =
 let node_fs: fs t = Unsafe.eval_string "require('fs')"
 
 
+
+
 let mkdir (path:string) (f:unit option -> unit): unit =
   node_fs##mkdir
     (string path)
@@ -126,28 +133,39 @@ let stat (path:string): _ option =
      assert false
 
 
-let open_ (path:string) (flags:string) (k:int option -> unit): unit =
-  node_fs##open_
-    (string path)
-    (string flags)
-    (wrap_callback
-       (fun err fd ->
-         if Opt.test err then
-           k None
-         else
-           k @@ Some fd))
+let open_
+    (path:string)
+    (flags:string)
+    (k: (int, Fmlib.Io.Error.t) result -> unit):
+    unit
+=
+    node_fs##open_
+        (string path)
+        (string flags)
+        (wrap_callback
+            (fun error fd ->
+                match Opt.to_option error with
+                | None ->
+                    k (Ok fd)
+                | Some js_error ->
+                    k (Error (make_io_error js_error))
+            )
+        )
 
 
-let close (fd:int) (k:unit option -> unit): unit =
-  node_fs##close
-    fd
-    (wrap_callback
-       (fun err ->
-         if Opt.test err then
-           k None
-         else
-           k @@ Some ()))
 
+let close (fd:int) (k: (unit, Fmlib.Io.Error.t) result -> unit): unit =
+    node_fs##close
+        fd
+        (wrap_callback
+            (fun error ->
+                match Opt.to_option error with
+                | None ->
+                    k (Ok ())
+                | Some js_error ->
+                    k (Error (make_io_error js_error))
+            )
+        )
 
 
 let read
@@ -171,13 +189,7 @@ let read
                     Io_buffer.set_write_pointer buf n;
                     f (Ok n)
                 | Some js_error ->
-                    f (
-                        Error (
-                            Fmlib.Io.Error.make
-                                (to_string js_error##.code)
-                                (to_string js_error##.message)
-                        )
-                    )
+                    f (Error (make_io_error js_error))
         ))
 
 

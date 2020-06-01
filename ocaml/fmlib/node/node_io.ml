@@ -15,24 +15,7 @@ module type BUFFER =
 
 
 
-
-module type BUFFERS =
-  functor (B:BUFFER) ->
-  sig
-    type t
-    val make: int -> t
-    val is_open_write: t -> int -> bool
-    val is_open_read: t -> int -> bool
-    val capacity: t -> int
-    val occupy_readable: t -> int -> int
-    val occupy_writable: t -> int -> int
-    val writable_file: t -> int -> int * B.t
-    val readable_file: t -> int -> int * B.t
-  end
-
-
-
-module Buffers: BUFFERS =
+module Buffers =
 functor (B:BUFFER) ->
 struct
     type file =
@@ -78,6 +61,16 @@ struct
 
     let occupy_writable (s:t) (fd:int): int =
       occupy s (fun b -> Write(fd,b))
+
+
+    let release (s: t) (fd: int): unit =
+        Pool.release s.files fd
+
+
+    let unix_file_descriptor (s: t) (i: int): int =
+        match Pool.elem s.files i with
+        | Write (fd, _) | Read (fd, _) ->
+            fd
 
 
     let readable_file (s:t) (i:int): int * B.t =
@@ -224,21 +217,21 @@ struct
 
 
 
-    let readable_file (fd:out_file): (int * Io_buffer.t) t =
+    let readable_file (fd: out_file): (int * Io_buffer.t) t =
       fun w k ->
       assert (World.is_open_read w fd);
       let fd,buf = World.readable_file w fd in
       k (fd,buf) w
 
 
-    let writable_file (fd:out_file): (int * Io_buffer.t) t =
+    let writable_file (fd: out_file): (int * Io_buffer.t) t =
       fun w k ->
       assert (World.is_open_write w fd);
       let fd,buf = World.writable_file w fd in
       k (fd,buf) w
 
 
-    let write (fd:out_file): unit option t =
+    let write (fd: out_file): unit option t =
       writable_file fd >>= fun (fd,buf) ->
       flush_buffer fd buf
 
@@ -335,6 +328,66 @@ struct
 
 
 
+    let open_
+        (path: string) (flags: string) (occupy: World.t -> int -> int):
+        in_file io_result t
+    =
+        fun w k ->
+        let kk unix_fd w =
+            let fd =
+                Result.map
+                    (fun unix_fd -> occupy w unix_fd)
+                    unix_fd
+            in
+            k fd w
+        in
+        File_system.open_
+            path
+            flags
+            (fun fd ->
+                execute_program @@ kk fd w
+            );
+        Done
+
+
+
+    let open_for_read (path: string): in_file io_result t =
+        open_ path "r" World.occupy_readable
+
+
+
+    let open_for_write (path: string): out_file io_result t =
+        open_ path "w" World.occupy_writable
+
+
+
+    let create (path: string): out_file io_result t =
+        open_ path "wx" World.occupy_writable
+
+
+
+    let close (fd: int): unit t =
+        fun w k ->
+        let unix_fd = World.unix_file_descriptor w fd
+        in
+        File_system.close
+            unix_fd
+            (fun _ ->
+                World.release w fd;
+                execute_program @@ k () w);
+        Done
+
+
+    let close_in (fd: in_file): unit t =
+        close fd
+
+
+    let close_out (fd: out_file): unit t =
+        flush fd
+        >>= fun _ ->
+        close fd
+
+
 
 
     module Read (W: WRITABLE) =
@@ -350,11 +403,11 @@ struct
 
         let read (fd: in_file) (w: W.t): (W.t, W.t * Error.t) result t =
             readable_file fd
-            >>= fun (fd, buf) ->
+            >>= fun (unix_fd, buf) ->
             let rec read w =
                 if W.needs_more w then
                     if Io_buffer.is_empty buf then
-                        fill_buffer fd buf
+                        fill_buffer unix_fd buf
                         >>= fun res ->
                         match res with
                         | Ok n ->

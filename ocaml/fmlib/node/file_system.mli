@@ -5,8 +5,13 @@ val readdir: string -> (string array option -> unit) -> unit
 
 val stat: string -> 'a option
 
-val open_: string -> string -> (int option -> unit) -> unit
-val close: int -> (unit option -> unit) -> unit
+val open_:
+    string
+    -> string
+    -> ((int, Fmlib.Io.Error.t) result -> unit)
+    -> unit
+
+val close: int -> ((unit, Fmlib.Io.Error.t) result -> unit) -> unit
 
 val read:
     int
