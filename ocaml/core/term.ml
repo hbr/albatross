@@ -602,19 +602,23 @@ let rec substitute0 (f:int -> t) (beta_reduce: bool) (t:t): t =
         | Typed (e, tp) ->
             Typed (sub e nb, sub tp nb)
 
-        | Appl (Variable i, a, mode) ->
-            let f = sub (Variable i) nb
-            and a = sub a nb in
-            (
-                match f with
-                | Lambda (_, exp, _) when beta_reduce ->
-                    apply exp a
-                | _ ->
-                    Appl (f, a, mode)
-            )
-
         | Appl (f, a, mode) ->
-            Appl (sub f nb, sub a nb, mode)
+            begin match f with
+            | Lambda _ ->
+                (* Old lambdas are not modified. *)
+                Appl (sub f nb, sub a nb, mode)
+            | _ ->
+                let fnew = sub f nb in
+                begin match fnew with
+                | Lambda (_, exp, _ ) when beta_reduce ->
+                    (* Substitution introduced a new lambda term as the function
+                    term. Therefore we beta reduce. *)
+                    apply exp (sub a nb)
+                | _ ->
+                    (* No new lambda term introduced. *)
+                    Appl (fnew, sub a nb, mode)
+                end
+            end
 
         | Lambda (tp, exp, info) ->
            Lambda (sub tp nb, sub exp (nb + 1), info)
