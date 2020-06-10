@@ -721,9 +721,9 @@ struct
             parenthesized (
                 fun _ ->
                 indented (
-                    lonely_operator
-                    <|>
                     expression0 true ()
+                    <|>
+                    lonely_operator
                 )
             )
             <|>
