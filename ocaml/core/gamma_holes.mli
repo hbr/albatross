@@ -157,6 +157,18 @@ val fill_hole: int -> Term.t -> t -> t
 *)
 
 
+val fold_entries:
+    (int -> int -> string -> Term.typ -> bool -> Term.t option -> 'a -> 'a)
+    -> t
+    -> 'a
+    -> 'a
+(** [fold_entries f gh a] fold all entries with the folding function [f].
+
+    [f] is called with the following arguments:
+
+    [f level idx name typ is_hole value_opt a]
+*)
+
 
 val push_named_hole: string -> Term.typ -> t -> t
 (** [push_hole name typ gh] Add a hole with name [name] of type [typ] to [gh].

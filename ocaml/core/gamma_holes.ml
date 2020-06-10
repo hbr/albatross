@@ -209,7 +209,6 @@ let has_value (idx: int) (gh: t): bool =
     Option.has (value idx gh)
 
 
-
 let collect_holes
     (cnt0: int)
     (filled: bool)
@@ -302,6 +301,31 @@ let type_of_literal (value: Term.Value.t) (gh: t): Term.typ =
 let definition_term (idx: int) (gh: t): Term.t option =
     Gamma.definition_term idx gh.base
 
+
+
+let fold_entries
+    (f: int -> int -> string -> Term.typ -> bool -> Term.t option -> 'a -> 'a)
+    (gh: t)
+    (a: 'a):
+    'a
+=
+    let cnt0 = count_base gh
+    in
+    Array.foldi_left
+        (fun a k entry ->
+            let level = cnt0 + k in
+            let idx = index_of_level level gh in
+            f
+                level
+                idx
+                (name_at_level level gh)
+                (type_at_level level gh)
+                (Entry.is_hole entry)
+                (value idx gh)
+                a
+            )
+        a
+        gh.entries
 
 
 let push_bound (name: string) (typed: bool) (typ: Term.typ) (gh: t): t =
