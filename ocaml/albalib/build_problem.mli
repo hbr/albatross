@@ -49,3 +49,5 @@ sig
         string Sequence.t -> t -> P.t
 end
 
+
+val string_of_problem: string -> t -> string

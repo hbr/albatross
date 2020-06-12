@@ -342,3 +342,14 @@ struct
         description desc
         <+> cut
 end
+
+
+
+let string_of_problem (src: string) (problem: t): string =
+    let module Pretty_printer = Pretty_printer.Pretty (String_printer) in
+    let module Error_print = Print (Pretty_printer) in
+    String_printer.run (
+        Pretty_printer.run
+            0 70 70
+            (Error_print.print_with_source src problem)
+    )
