@@ -214,7 +214,7 @@ let%test _ =
     match
         add_inductive src Context.empty
     with
-    | Error (_, Build_problem.Not_positive) ->
+    | Error (_, Build_problem.Not_positive _) ->
         true
     | _ ->
         false
@@ -251,7 +251,7 @@ let%test _ =
             add_inductive src2 (Context.(add_builtin_type "TC" "TC" typ empty))
         )
     with
-    | Error (_, Not_positive) ->
+    | Error (_, Not_positive _) ->
         true
     | _ ->
         false

@@ -29,7 +29,7 @@ type description =
     | Wrong_type_constructed
     | Negative
     | Nested_negative of Inductive.t * int * Gamma.t
-    | Not_positive
+    | Not_positive of Term.typ * Gamma.t
     | Not_yet_implemented of string
 
 

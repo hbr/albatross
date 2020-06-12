@@ -1,3 +1,78 @@
+(*
+
+General form of an inductive definition
+
+    mutual
+        class
+            I0 (p0: P0) ... : T0
+        :=
+            co00: CT00
+            co01: CT01
+            ...
+
+        class
+            I1 (p0: P0) ... : T1
+        :=
+            co10: CT10
+            co11: CT11
+            ...
+
+        ...
+
+Checks
+
+    - The parameters are the same (same number, same names and same types) in a
+      inductive definitions of the family.
+
+    - Names of inductive classes and all constructors different.
+
+    - Each constructor type CTij has the form
+
+        all (b0: B0) (b1: B1) ... : R
+
+    - Each constructor constructs an object of its corresponding type, i.e. the
+      final type R of each constructor type CTij has the form
+
+        R = Ii p0 p1 ... a0 a1 ...
+
+      where p0 p1 ... are exactly the parameters of the inductive definition and
+      the indices are arbitrary but do not contain any Ij of the family.
+
+    - Each constructor argument Bk has the form
+
+        Bk = all (c0: C0) (c1: C1) ... : RBk
+
+      where none of the Ii occurs in any of C0, C1, ... and any Ii can occur
+      only positively in RBk. C0, C1, ... are the negative positions and RBk is
+      the positive position of the constructor argument type Bk.
+
+
+Positive occurrence
+
+    A variable x occurs positively in a type T, if
+
+    - T = x a0 a1 ...
+
+      where x does not occur in a0 a1 ...
+
+    - T = I a0 a1 ...
+
+      where I is an external inductive type which is not mutually defined and
+      has some positive parameters and x occurs positively in ai which
+      correspond to a positive parameter and does not occur in other arguments.
+
+
+Positive parameters
+
+    A parameter p is positive, if
+
+    - p: Any or p: Proposition
+
+    - p occurs only positively in argument types of constructors.
+
+*)
+
+
 open Fmlib
 open Common
 
@@ -22,6 +97,52 @@ module Algo =
 type 'a result2 = ('a, Build_problem.t) result
 
 type params_located = (string Located.t * Term.typ) array
+
+
+module Data =
+struct
+    type t = {
+        cnt0: int;
+
+        params:  Inductive.params;
+        headers: Inductive.Header.t array;
+
+        positives: Int_set.t;
+    }
+
+    let make cnt0 headers params =
+        let param0 = cnt0 + Array.length headers
+        in
+        let positives =
+            Array.foldi_left
+                (fun set i (_, typ) ->
+                    let open Term in
+                    match typ with
+                    | Sort Sort.Any _ | Sort Sort.Proposition ->
+                        Int_set.add (param0 + i) set
+
+                    | _ ->
+                        set
+                )
+                Int_set.empty
+                params
+        in
+        {cnt0; params; headers; positives}
+
+
+    let is_inductive (d: t) (level: int): bool =
+        d.cnt0 <= level
+        &&
+        level < d.cnt0 + Array.length d.headers
+
+
+    let remove_positive (level: int) (d: t): t =
+        {d with
+            positives =
+                Int_set.remove level d.positives
+        }
+end
+
 
 
 
@@ -316,6 +437,7 @@ let positive_occurrences
         | Variable i ->
             let level = Gamma.level_of_index i gamma in
             if p level then
+                (* [f,i,level] is an inductive type of the family. *)
                 if List.exists
                     (fun (arg, _) ->
                         Gamma.level_has p arg gamma)
@@ -325,13 +447,14 @@ let positive_occurrences
                 else
                     Some lst
             else
-                (* check indirect occurrences in args *)
+                (* [f,i,level] is not an inductive type of the family. Check
+                indirect occurrences in args *)
                 let module LMon = List.Monadic (Option) in
                 LMon.foldi_left
-                        (fun k (arg,_) lst ->
-                            collect arg ((level,k) :: lst))
-                        args
-                        lst
+                    (fun k (arg,_) lst ->
+                        collect arg ((level,k) :: lst))
+                    args
+                    lst
 
         | _ ->
             if Gamma.level_has p f gamma then
@@ -418,7 +541,8 @@ let check_constructor_argument_result_type
     *)
     match positive_occurrences is_inductive typ gamma with
     | None ->
-        Error (range, Build_problem.Not_positive)
+        Printf.printf "not positive 1\n";
+        Error (range, Build_problem.Not_positive (typ, gamma))
 
     | Some lst ->
         let get_ind level = Gamma.inductive_at_level level gamma
@@ -444,7 +568,8 @@ let check_constructor_argument_result_type
         | Some (level, iparam) ->
             match get_ind level with
             | None ->
-                Error (range, Build_problem.Not_positive)
+                Printf.printf "not positive 2\n";
+                Error (range, Build_problem.Not_positive (typ, gamma))
             | Some ind ->
                 Error (
                     range,
@@ -661,9 +786,11 @@ let constructors
         push_types params headers context
         |>
         push_params (Array.length headers) params
+    and data =
+        Data.make (Context.count context) headers params
     in
-    (* list of constructor sets with corresponding header a number of previous
-    constructors. *)
+    (* list of constructor sets with corresponding header and number of previous
+       constructors. *)
     let module Arr = Array.Monadic (Result) in
     Arr.foldi_left
         (fun i header (n, negative_params, constructors) ->

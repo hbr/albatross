@@ -29,7 +29,7 @@ type description =
     | Wrong_type_constructed
     | Negative
     | Nested_negative of Inductive.t * int * Gamma.t
-    | Not_positive
+    | Not_positive of Term.typ * Gamma.t
     | Not_yet_implemented of string
 
 
@@ -297,11 +297,15 @@ struct
                  positivity condition."
             <+> cut
 
-        | Not_positive ->
+        | Not_positive (typ, gamma) ->
             wrap_words
-                "The constructor does not satify the positivity condition. \
-                One of its argument types used an inductive type of the family \
-                in a positive position, but not in the correct format."
+                "The constructor does not satisfy the positivity condition. \
+                One of its argument types uses an inductive type of the family \
+                in the positive position:"
+            <+> cut <+> cut
+            <+> nest 4 (PP.print typ gamma)
+            <+> cut <+> cut
+            <+> wrap_words "However it is not used in the correct format."
             <+> cut
 
         | Not_yet_implemented str ->
