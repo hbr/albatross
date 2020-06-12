@@ -26,7 +26,7 @@ type description =
     | No_inductive_type
     | Duplicate_inductive
     | Duplicate_constructor
-    | Wrong_type_constructed
+    | Wrong_type_constructed of Term.typ * Gamma.t
     | Negative
     | Nested_negative of Inductive.t * int * Gamma.t
     | Not_positive of Term.typ * Gamma.t
@@ -257,7 +257,7 @@ struct
                 names."
             <+> cut
 
-        | Wrong_type_constructed ->
+        | Wrong_type_constructed (res, gamma) ->
             wrap_words
                 "All constructors of an inductive type must construct an \
                 object of the inductive type. The constructed type must have \
@@ -267,8 +267,11 @@ struct
             <+> cut <+> cut
             <+> wrap_words
                 "where 'I' is the name of the inductive type, 'p1 p2 ...' \
-                are the parameters and 'i1 i2 ...' are the indices."
-            <+> cut
+                are the parameters and 'i1 i2 ...' are the indices. However \
+                the constructed type has the form"
+            <+> cut <+> cut
+            <+> nest 4 (PP.print res gamma)
+            <+> cut <+> cut
 
         | Negative ->
             wrap_words

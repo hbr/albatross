@@ -26,7 +26,7 @@ type description =
     | No_inductive_type
     | Duplicate_inductive
     | Duplicate_constructor
-    | Wrong_type_constructed
+    | Wrong_type_constructed of Term.typ * Gamma.t
     | Negative
     | Nested_negative of Inductive.t * int * Gamma.t
     | Not_positive of Term.typ * Gamma.t

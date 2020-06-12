@@ -4,20 +4,41 @@ General form of an inductive definition
 
     mutual
         class
-            I0 (p0: P0) ... : T0
+            I0 (p0: P0) ... : K0
         :=
             co00: CT00
             co01: CT01
             ...
 
         class
-            I1 (p0: P0) ... : T1
+            I1 (p0: P0) ... : K1
         :=
             co10: CT10
             co11: CT11
             ...
-
         ...
+
+Kinds
+
+    K0, K1, ... are the kinds of the inductive types. Each kind must have the
+    normal form
+
+        Ki = all (a0: A0) (a1: A1) ... : s
+
+    where s is either Any or Proposition.
+
+    a0, a1, ... are the indices of the type.
+
+Headers
+
+    The headers of an inductive definition are
+
+        I0 (p0: P0) ... : K0
+        I1 (p0: P0) ... : K1
+        ...
+
+    We store the paramaters, which are common to all types of the family and the
+    pairs (Ii, Ki) separately. In this module the headers are just the pairs.
 
 Checks
 
@@ -99,15 +120,20 @@ type 'a result2 = ('a, Build_problem.t) result
 type params_located = (string Located.t * Term.typ) array
 
 
+
+
+(* Needed data to analyze constructors. *)
 module Data =
 struct
     type t = {
-        cnt0: int;
+        cnt0: int;  (* Size of the context without headers and parameters. *)
 
         params:  Inductive.params;
         headers: Inductive.Header.t array;
 
-        positives: Int_set.t;
+        positives: Int_set.t; (* Candidate set for positive parameters. At the
+                                 end of the analysis, the set contains all
+                                 positive parameters. *)
     }
 
     let make cnt0 headers params =
@@ -130,18 +156,52 @@ struct
         {cnt0; params; headers; positives}
 
 
-    let is_inductive (d: t) (level: int): bool =
+    let header (i: int) (d: t): Inductive.Header.t =
+        d.headers.(i)
+
+
+    let param0 (d: t): int =
+        d.cnt0 + Array.length d.headers
+
+
+    let param1 (d: t): int =
+        d.cnt0 + Array.length d.headers + Array.length d.params
+
+
+    let params (d: t): Inductive.params =
+        d.params
+
+
+    let headers (d: t): Inductive.Header.t array =
+        d.headers
+
+
+    let constructor_base_count (d: t): int =
+        d.cnt0 + Array.length d.headers + Array.length d.params
+
+
+    let is_inductive (level: int) (d: t): bool =
         d.cnt0 <= level
         &&
         level < d.cnt0 + Array.length d.headers
 
 
+    let positives (d: t): Int_set.t =
+        d.positives
+
+
     let remove_positive (level: int) (d: t): t =
-        {d with
-            positives =
-                Int_set.remove level d.positives
-        }
-end
+        let param0 = d.cnt0 + Array.length d.headers
+        and nparams = Array.length d.params
+        in
+        if param0 <= level && level < param0 + nparams then
+            {d with
+                positives =
+                    Int_set.remove (level - param0) d.positives
+            }
+        else
+            d
+end (* Data *)
 
 
 
@@ -468,13 +528,10 @@ let positive_occurrences
 
 
 let negative_parameter_occurrences
-    (is_inductive: int -> bool)
-    (param1: int)
-    (param2: int)
     (typ: Term.typ)
     (gamma: Gamma.t)
-    (negative_params: Int_set.t):
-    Int_set.t
+    (data: Data.t):
+    Data.t
 =
     (* [typ] is the final type of an argument type of a constructor of the
     inductive family.
@@ -484,9 +541,12 @@ let negative_parameter_occurrences
     the application of a type of the inductive family or the parameter does not
     occur in the correct position.
     *)
+    let param0 = Data.param0 data
+    and param1 = Data.param1 data
+    in
     Common.Interval.fold
-        negative_params
-        (fun level_param set ->
+        data
+        (fun level_param data ->
             match
                 positive_occurrences
                     (fun level -> level = level_param)
@@ -494,13 +554,13 @@ let negative_parameter_occurrences
                     gamma
             with
             | None ->
-                set
+                data
             | Some lst ->
                 if
                     List.for_all
                         (fun (level,iparam) ->
-                            (   is_inductive level
-                                && param1 + iparam = level_param)
+                            (   Data.is_inductive level data
+                                && param0 + iparam = level_param)
                             ||
                             match Gamma.inductive_at_level level gamma with
                             | None ->
@@ -509,25 +569,22 @@ let negative_parameter_occurrences
                                 Inductive.is_param_positive iparam ind)
                         lst
                 then
-                    set
+                    data
                 else
-                    Int_set.add (level_param - param1) set
+                    Data.remove_positive level_param data
         )
-        param1 param2
+        param0 param1
 
 
 
 
 
 let check_constructor_argument_result_type
-    (is_inductive: int -> bool)
-    (param1: int)
-    (param2: int)
     (range: range)
-    (negative_params: Int_set.t)
+    (data: Data.t)
     (typ: Term.typ)
     (gamma: Gamma.t):
-    Int_set.t result2
+    Data.t result2
 =
     (* [typ] is the final type of an argument type of a constructor of the
     inductive family.
@@ -539,6 +596,9 @@ let check_constructor_argument_result_type
         - either immediately
         - or indirectly as I1 ... (I a0 a1 ...]) ...
     *)
+    let is_inductive level =
+        Data.is_inductive level data
+    in
     match positive_occurrences is_inductive typ gamma with
     | None ->
         Printf.printf "not positive 1\n";
@@ -560,9 +620,8 @@ let check_constructor_argument_result_type
         | None ->
             Ok (
                 negative_parameter_occurrences
-                    is_inductive param1 param2
                     typ gamma
-                    negative_params
+                    data
             )
 
         | Some (level, iparam) ->
@@ -581,38 +640,31 @@ let check_constructor_argument_result_type
 
 
 let check_constructor_argument_type
-    (is_inductive: int -> bool)
-    (param1: int)
-    (param2: int)
     (range: range)
-    (negative_params: Int_set.t)
+    (data: Data.t)
     (arg_typ: Term.typ)
     (gamma: Gamma.t) :
-    Int_set.t result2
+    Data.t result2
 =
     fold_type
-        (fun negative_params typ gamma ->
+        (fun data typ gamma ->
+            let is_inductive level = Data.is_inductive level data
+            in
             if Gamma.level_has is_inductive typ gamma then
                 Error (range, Build_problem.Negative)
             else
                 Ok (
                     Term.fold_free
-                        (fun idx set ->
+                        (fun idx data ->
                             let level = Gamma.level_of_index idx gamma in
-                            if param1 <= level && level < param2 then
-                                Int_set.add (level - param1) set
-                            else
-                                set
+                            Data.remove_positive level data
                         )
                         typ
-                        negative_params
+                        data
                 )
         )
-        (check_constructor_argument_result_type
-            is_inductive
-            param1 param2
-            range)
-        negative_params
+        (check_constructor_argument_result_type range)
+        data
         arg_typ
         gamma
 
@@ -622,26 +674,26 @@ let check_constructor_argument_type
 
 let check_constructor_result_type
     (i: int)
-    (cnt0: int)
-    (params: Inductive.params)
-    (headers: Inductive.Header.t array)
     (range: range)
-    (negative_params: Int_set.t)
+    (data: Data.t)
     (res: Term.typ)
     (gamma: Gamma.t) :
-    Int_set.t result2
+    Data.t result2
 =
     if
         Inductive.Header.is_well_constructed
             i
-            params
-            headers
-            Gamma.(count gamma - cnt0)
+            (Data.params data)
+            (Data.headers data)
+            Gamma.(count gamma - Data.constructor_base_count data)
             res
     then
-        Ok negative_params
+        Ok data
     else
-        Error (range, Build_problem.Wrong_type_constructed)
+        Error (
+            range,
+            Build_problem.Wrong_type_constructed (res, gamma)
+        )
 
 
 
@@ -649,35 +701,22 @@ let check_constructor_result_type
 
 let check_constructor_type
     (i: int)
-    (negative_params: Int_set.t)
-    (params: Inductive.params)
-    (headers: Inductive.Header.t array)
+    (data: Data.t)
     (name: string Located.t)
     (typ: Term.typ)
     (c: Context.t)
-    : (Int_set.t * Inductive.Constructor.t) result2
+    : (Data.t * Inductive.Constructor.t) result2
 =
-    let nparams = Array.length params
-    and ntypes  = Array.length headers
-    and range   = Located.range name
-    in
-    let cnt0 = Context.count c - nparams - ntypes in
-    assert (0 <= cnt0);
-    let is_inductive level =
-        cnt0 <= level && level < cnt0 + ntypes
+    let range   = Located.range name
     in
     fold_type
-        (check_constructor_argument_type
-            is_inductive
-            (cnt0 + ntypes)
-            (cnt0 + ntypes + nparams)
-            range)
-        (check_constructor_result_type i (Context.count c) params headers range)
-        negative_params
+        (check_constructor_argument_type range)
+        (check_constructor_result_type i range)
+        data
         typ
         (Context.gamma c)
-    >>= fun negative_params ->
-    Ok (negative_params, Inductive.Constructor.make (Located.value name) typ)
+    >>= fun data ->
+    Ok (data, Inductive.Constructor.make (Located.value name) typ)
 
 
 
@@ -685,13 +724,11 @@ let check_constructor_type
 
 let one_constructor
     (i: int)                                      (* inductive type *)
-    (negative_params: Int_set.t)
-    (params: Inductive.params)
-    (headers: Inductive.Header.t array)
+    (data: Data.t)
     ((name, (fargs, typ))
         : Source_entry.named_signature)
     (c: Context.t)                                (* with types and params *)
-    : (Int_set.t * Inductive.Constructor.t) result2
+    : (Data.t * Inductive.Constructor.t) result2
 =
     (* Collect constructor arguments. *)
     let module Lst = List.Monadic (Result) in
@@ -720,14 +757,19 @@ let one_constructor
             (*  Must be the default inductive type. Only possible without
                 indices. *)
             if
-                Inductive.Header.has_index headers.(i)
+                Inductive.Header.has_index (Data.header i data)
             then
                 Error (
                     Located.range name,
                     Build_problem.Missing_inductive_type
                 )
             else
-                Ok (Inductive.Header.default_type i params headers)
+                Ok (
+                    Inductive.Header.default_type
+                        i
+                        (Data.params data)
+                        (Data.headers data)
+                )
 
         | Some typ ->
             Build_expression.build_named_type name typ c1
@@ -740,7 +782,7 @@ let one_constructor
             typ
             fargs
     in
-    check_constructor_type i negative_params params headers name typ c
+    check_constructor_type i data name typ c
 
 
 
@@ -748,29 +790,27 @@ let one_constructor
 
 let one_constructor_set
     (i: int) (* inductive type *)
-    (negative_params: Int_set.t)
-    (params: Inductive.params)
-    (headers: Inductive.Header.t array)
+    (data: Data.t)
     (inds: Source_entry.inductive array)
     (c: Context.t)  (* with types and params *)
-    : (Int_set.t * Inductive.Constructor.t array) result2
+    : (Data.t * Inductive.Constructor.t array) result2
 =
     let module Arr = Array.Monadic (Result) in
     Arr.fold_left
-        (fun constructor (set, negative_params, lst) ->
-            one_constructor i negative_params params headers constructor c
-            >>= fun (negative_params, co) ->
+        (fun constructor (set, data, lst) ->
+            one_constructor i data constructor c
+            >>= fun (data, co) ->
             let name, _ = constructor in
             let name_str = Located.value name in
             if String_set.mem name_str set then
                 Error (Located.range name, Build_problem.Duplicate_constructor)
             else
-                Ok (String_set.add name_str set, negative_params, co :: lst)
+                Ok (String_set.add name_str set, data, co :: lst)
         )
         (snd inds.(i))
-        (String_set.empty, negative_params, [])
-    >>= fun (_, negative_params, lst) ->
-    Ok (negative_params, Array.of_list (List.rev lst))
+        (String_set.empty, data, [])
+    >>= fun (_, data, lst) ->
+    Ok (data, Array.of_list (List.rev lst))
 
 
 
@@ -793,22 +833,29 @@ let constructors
        constructors. *)
     let module Arr = Array.Monadic (Result) in
     Arr.foldi_left
-        (fun i header (n, negative_params, constructors) ->
-            one_constructor_set i negative_params params headers inds context1
-            >>= fun (negative_params, constructor_set) ->
+        (fun i header (n, data, constructors) ->
+            one_constructor_set
+                i
+                data
+                inds
+                context1
+            >>= fun (data, constructor_set) ->
             Ok (
                 n + Array.length constructor_set
                 ,
-                negative_params
+                data
                 ,
                 Inductive.Type.make n header constructor_set :: constructors
             )
         )
         headers
-        (0, Int_set.empty, [])
+        (0, data, [])
     >>=
-    fun (_, negative_params, types) ->
-    Ok Inductive.(make params negative_params (Array.of_list (List.rev types)))
+    fun (_, data, types) ->
+    Ok Inductive.(make
+        params
+        (Data.positives data)
+        (Array.of_list (List.rev types)))
 
 
 

@@ -52,6 +52,7 @@ let add_inductive (src: string) (c: Context.t): Context.t =
     | Some def ->
         match Builder.add_inductive def c with
         | Error _ ->
+            Printf.printf "Standard_context.add_inductive\n%s\n" src;
             assert false
         | Ok c ->
             c

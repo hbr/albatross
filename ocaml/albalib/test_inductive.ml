@@ -175,7 +175,7 @@ let%test _ =
     match
         add_inductive src Context.empty
     with
-    | Error (_, Build_problem.Wrong_type_constructed) ->
+    | Error (_, Build_problem.Wrong_type_constructed _) ->
         true
     | _ ->
         false
@@ -188,7 +188,7 @@ let%test _ =
     match
         add_inductive src Context.empty
     with
-    | Error (_, Build_problem.Wrong_type_constructed) ->
+    | Error (_, Build_problem.Wrong_type_constructed _) ->
         true
     | _ ->
         false

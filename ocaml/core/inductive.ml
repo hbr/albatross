@@ -144,14 +144,14 @@ type t = {
 
     params: params;
 
-    negative_params: Common.Int_set.t;
+    positive_params: Common.Int_set.t;
 
     types: Type.t array;
 }
 
 
-let make params negative_params types =
-    {n_up = 0; params; negative_params; types}
+let make params positive_params types =
+    {n_up = 0; params; positive_params; types}
 
 
 let up (n: int) (ind: t): t =
@@ -167,14 +167,14 @@ let count_params (ind: t): int =
     Array.length ind.params
 
 
-let is_param_negative (iparam: int) (ind: t): bool =
-    assert (iparam < count_params ind);
-    Common.Int_set.mem iparam ind.negative_params
-
-
 let is_param_positive (iparam: int) (ind: t): bool =
     assert (iparam < count_params ind);
-    not (is_param_negative iparam ind)
+    Common.Int_set.mem iparam ind.positive_params
+
+
+let is_param_negative (iparam: int) (ind: t): bool =
+    assert (iparam < count_params ind);
+    not (is_param_positive iparam ind)
 
 
 let parameter_name (iparam: int) (ind: t): string =
