@@ -117,7 +117,7 @@ struct
 
         let expand (term: Term.t) (uc: t): Term.t =
             let nlocs = nlocals uc in
-            Term.substitute
+            Term.substitute_with_beta
                 (fun i ->
                     if i < nlocs then
                         Variable i
@@ -384,6 +384,8 @@ struct
         (gh: Gh.t)
         : Gh.t option
         =
+        (*Printf.printf "\nnew unification (old unifier)\n";*)
+        let res =
         Option.map
             (fun (uc,()) ->
                 Uc.base uc)
@@ -393,4 +395,17 @@ struct
                 is_super
                 ()
                 (Uc.make gh))
+        in
+        match res with
+        | Some _ ->
+            res
+        | None ->
+            (*let string_of_term t =
+                Term_printer.string_of_term t (Gh.context gh)
+            in
+            Printf.printf "failed act %s, req %s (%b)\n"
+                (string_of_term act)
+                (string_of_term req)
+                is_super;*)
+            res
 end (* Make *)

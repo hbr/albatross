@@ -252,7 +252,7 @@ let unfilled_holes (cnt0: int) (term: Term.t) (gh: t): Int_set.t =
 
 
 let expand (term: Term.t) (gh: t): Term.t =
-    Term.substitute
+    Term.substitute_with_beta
         (fun i ->
             match value i gh with
             | None ->
