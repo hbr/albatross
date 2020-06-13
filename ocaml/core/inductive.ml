@@ -168,13 +168,9 @@ let count_params (ind: t): int =
 
 
 let is_param_positive (iparam: int) (ind: t): bool =
-    assert (iparam < count_params ind);
+    iparam < count_params ind
+    &&
     Common.Int_set.mem iparam ind.positive_params
-
-
-let is_param_negative (iparam: int) (ind: t): bool =
-    assert (iparam < count_params ind);
-    not (is_param_positive iparam ind)
 
 
 let parameter_name (iparam: int) (ind: t): string =

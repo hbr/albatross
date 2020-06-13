@@ -121,10 +121,10 @@ let add_logic (c: Context.t): Context.t =
         "class (or) (a: Proposition) (b: Proposition): Proposition :=\
         \n    left:  a => a or b\
         \n    right: b => a or b"
-    (*|>
+    |>
     add_inductive
         "class exist (A: Any) (f: A -> Proposition): Proposition :=\
-        \n    witness (a: A): f a => exist f"*)
+        \n    witness (a: A): f a => exist f"
 
 
 

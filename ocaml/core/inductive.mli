@@ -65,7 +65,6 @@ val count_types: t -> int
 
 val count_params: t -> int
 
-val is_param_negative: int -> t -> bool
 val is_param_positive: int -> t -> bool
 
 val parameter_name: int -> t -> string

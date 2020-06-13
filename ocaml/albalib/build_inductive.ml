@@ -91,6 +91,7 @@ Positive parameters
 
     - p occurs only positively in argument types of constructors.
 
+
 *)
 
 
@@ -158,14 +159,6 @@ struct
 
     let header (i: int) (d: t): Inductive.Header.t =
         d.headers.(i)
-
-
-    let param0 (d: t): int =
-        d.cnt0 + Array.length d.headers
-
-
-    let param1 (d: t): int =
-        d.cnt0 + Array.length d.headers + Array.length d.params
 
 
     let params (d: t): Inductive.params =
@@ -470,111 +463,29 @@ let fold_type
 
 
 
-let positive_occurrences
-    (p: int -> bool)
-    (typ: Term.typ)
-    (gamma: Gamma.t)
-    : (int * int) list option
-=
-    (* [typ] is the final type of the argument type of a contructor argument.
-    Check that all types of the inductive family do not occur or occur only
-    positively (directly or nested) as [I a1 a2 ...] where none of the I's
-    appears in any ai.
-
-    Return [None]
-
-        - if [I] occurs as [I a1 a2 ...] and [I] occurs within some [ai].
-
-        - if [typ] does not start with a variable and some [I] occurs in [typ].
-
-    Return list of pairs (level, iparam)
-
-        - [I] occurs indirectly in [level] as [iparam] argument.
-    *)
-    let rec collect typ lst =
-        let f, args = Algo.key_split typ gamma in
-        match f with
-        | Variable i ->
-            let level = Gamma.level_of_index i gamma in
-            if p level then
-                (* [f,i,level] is an inductive type of the family. *)
-                if List.exists
-                    (fun (arg, _) ->
-                        Gamma.level_has p arg gamma)
-                    args
-                then
-                    None
-                else
-                    Some lst
-            else
-                (* [f,i,level] is not an inductive type of the family. Check
-                indirect occurrences in args *)
-                let module LMon = List.Monadic (Option) in
-                LMon.foldi_left
-                    (fun k (arg,_) lst ->
-                        collect arg ((level,k) :: lst))
-                    args
-                    lst
-
-        | _ ->
-            if Gamma.level_has p f gamma then
-                None
-            else
-                Some lst
-    in
-    collect typ []
 
 
 
 
-let negative_parameter_occurrences
-    (typ: Term.typ)
+let check_non_occurrence
+    (error: unit -> Data.t result2)
+    (term: Term.t)
     (gamma: Gamma.t)
     (data: Data.t):
-    Data.t
+    Data.t result2
 =
-    (* [typ] is the final type of an argument type of a constructor of the
-    inductive family.
-
-    Collect all occurrences of the parameters which might not be strictly
-    positive, i.e. if a parameter occurs within some application and it is not
-    the application of a type of the inductive family or the parameter does not
-    occur in the correct position.
-    *)
-    let param0 = Data.param0 data
-    and param1 = Data.param1 data
-    in
-    Common.Interval.fold
-        data
-        (fun level_param data ->
-            match
-                positive_occurrences
-                    (fun level -> level = level_param)
-                    typ
-                    gamma
-            with
-            | None ->
-                data
-            | Some lst ->
-                if
-                    List.for_all
-                        (fun (level,iparam) ->
-                            (   Data.is_inductive level data
-                                && param0 + iparam = level_param)
-                            ||
-                            match Gamma.inductive_at_level level gamma with
-                            | None ->
-                                false
-                            | Some ind ->
-                                Inductive.is_param_positive iparam ind)
-                        lst
-                then
-                    data
-                else
-                    Data.remove_positive level_param data
+    let module TermM = Term.Monadic (Result) in
+    TermM.fold_free
+        (fun idx data ->
+            let level = Gamma.level_of_index idx gamma
+            in
+            if Data.is_inductive level data then
+                error ()
+            else
+                Ok (Data.remove_positive level data)
         )
-        param0 param1
-
+        term
+        data
 
 
 
@@ -586,54 +497,58 @@ let check_constructor_argument_result_type
     (gamma: Gamma.t):
     Data.t result2
 =
-    (* [typ] is the final type of an argument type of a constructor of the
-    inductive family.
-
-    An inductive [I] type of the family either
-
-    - does not appear
-    - appears as [I a0 a1 ...] where I does not appear in [a0 a1 ...]
-        - either immediately
-        - or indirectly as I1 ... (I a0 a1 ...]) ...
-    *)
-    let is_inductive level =
-        Data.is_inductive level data
+    let open Build_problem in
+    let not_positive _ =
+        Error (range, Not_positive (typ,gamma))
     in
-    match positive_occurrences is_inductive typ gamma with
-    | None ->
-        Printf.printf "not positive 1\n";
-        Error (range, Build_problem.Not_positive (typ, gamma))
+    let rec check term =
+        let key, args = Algo.key_split term gamma in
+        match key with
+        | Variable idx ->
+            let level = Gamma.level_of_index idx gamma in
+            if Data.is_inductive level data then
+                non_occurrence args not_positive
+            else begin
+                match Gamma.inductive_at_level level gamma with
+                | None ->
+                    non_occurrence args not_positive
+                | Some ind ->
+                    if Inductive.count_types ind = 1 then
+                        positive_occurrence ind args
+                    else
+                        non_occurrence args not_positive
 
-    | Some lst ->
-        let get_ind level = Gamma.inductive_at_level level gamma
-        in
-        match
-            List.find
-                (fun (level, iparam) ->
-                    match get_ind level with
-                    | None ->
-                        true
-                    | Some ind ->
-                        Inductive.is_param_negative iparam ind)
-                lst
-        with
-        | None ->
-            Ok (
-                negative_parameter_occurrences
-                    typ gamma
-                    data
+            end
+        | _ ->
+            check_non_occurrence not_positive term gamma data
+
+    and non_occurrence args error =
+        List_monadic.fold_left
+            (fun (arg, _) data ->
+                check_non_occurrence error arg gamma data
             )
+            args
+            data
 
-        | Some (level, iparam) ->
-            match get_ind level with
-            | None ->
-                Printf.printf "not positive 2\n";
-                Error (range, Build_problem.Not_positive (typ, gamma))
-            | Some ind ->
-                Error (
-                    range,
-                    Build_problem.Nested_negative (ind, iparam, gamma)
-                )
+    and positive_occurrence ind args =
+        List_monadic.foldi_left
+            (fun iparam (arg, _) data ->
+                if Inductive.is_param_positive iparam ind then
+                    check arg
+                else
+                    check_non_occurrence
+                        (fun _ -> Error (
+                            range,
+                            Nested_negative (ind, iparam, gamma)
+                        ))
+                        arg
+                        gamma
+                        data
+            )
+            args
+            data
+    in
+    check typ
 
 
 
@@ -648,20 +563,11 @@ let check_constructor_argument_type
 =
     fold_type
         (fun data typ gamma ->
-            let is_inductive level = Data.is_inductive level data
-            in
-            if Gamma.level_has is_inductive typ gamma then
-                Error (range, Build_problem.Negative)
-            else
-                Ok (
-                    Term.fold_free
-                        (fun idx data ->
-                            let level = Gamma.level_of_index idx gamma in
-                            Data.remove_positive level data
-                        )
-                        typ
-                        data
-                )
+            check_non_occurrence
+                (fun _ -> Error (range, Build_problem.Negative))
+                typ
+                gamma
+                data
         )
         (check_constructor_argument_result_type range)
         data
