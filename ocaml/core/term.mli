@@ -254,6 +254,7 @@ val has_variable: int -> t -> bool
 module Monadic (M: MONAD):
 sig
     val fold_free: (int -> 'a -> 'a M.t) -> t -> 'a -> 'a M.t
+    val map_free: (int -> int M.t) -> t -> t M.t
 end
 
 (** Inductive types *)

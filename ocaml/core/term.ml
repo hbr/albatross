@@ -460,6 +460,93 @@ let pi_sort (arg: typ) (res: typ): typ =
 
 
 
+module Monadic (M: MONAD) =
+struct
+    let fold_free
+        (f: int -> 'a -> 'a M.t)
+        (term: t)
+        (start: 'a)
+        : 'a M.t
+    =
+        let rec fold term nb start =
+            match term with
+
+            | Value _ | Sort _ ->
+                M.return start
+
+            | Variable i when i < nb ->
+                M.return start
+
+            | Variable i ->
+                f (i - nb) start
+
+            | Typed (e, tp) ->
+                M.(fold e nb start >>= fold tp nb)
+
+            | Appl (f, a, _) ->
+                M.(fold f nb start >>= fold a nb)
+
+            | Lambda (tp, exp, _) ->
+                M.(fold tp nb start >>= fold exp (nb + 1))
+
+            | Pi (tp, rt, _) ->
+                M.(fold tp nb start >>= fold rt (nb + 1))
+
+            | Where (_, tp, exp, def) ->
+                let open M in
+                fold tp nb start
+                >>= fold exp (nb + 1)
+                >>= fold def nb
+        in
+        fold term 0 start
+
+
+    let map_free
+        (f: int -> int M.t)
+        (term: t):
+        t M.t
+    =
+        let open M in
+        let rec map nb term =
+            match term with
+            | Sort _ | Value _ ->
+                return term
+
+            | Variable i when i < nb ->
+                return (Variable i)
+
+            | Variable i ->
+                f (i - nb) >>= fun j ->
+                return (Variable (j + nb))
+
+            | Typed (exp, tp) ->
+                map nb exp >>= fun exp ->
+                map nb tp  >>= fun tp ->
+                return (Typed (exp, tp))
+
+            | Appl (f, a, info) ->
+                map nb f >>= fun f ->
+                map nb a >>= fun a ->
+                return (Appl (f, a, info))
+
+            | Lambda (tp, exp, info) ->
+                map nb tp >>= fun tp ->
+                map (nb + 1) exp >>= fun exp ->
+                return (Lambda (tp, exp, info))
+
+            | Pi (tp, res, info) ->
+                map nb tp >>= fun tp ->
+                map (nb + 1) res >>= fun res ->
+                return (Pi (tp, res, info))
+
+            | Where (name, tp, exp, value) ->
+                map nb tp >>= fun tp ->
+                map (nb + 1) exp >>= fun exp ->
+                map nb value >>= fun value ->
+                return (Where (name, tp, exp, value))
+        in
+        map 0 term
+end (* Monadic *)
 
 
 let split_application
@@ -479,33 +566,11 @@ let split_application
 
 
 let map (f: int -> int) (t: t): t =
-    let rec map nb t =
-        match t with
-        | Sort _ | Value _ ->
-            t
-
-        | Variable i when i < nb ->
-            Variable i
-
-        | Variable i ->
-            Variable (f (i - nb) + nb)
-
-        | Typed (exp, tp) ->
-            Typed (map nb exp, map nb tp)
-
-        | Appl (f, a, info) ->
-            Appl (map nb f, map nb a, info)
-
-        | Lambda (tp, exp, info) ->
-            Lambda (map nb tp, map (nb + 1) exp, info)
-
-        | Pi (tp, res, info) ->
-            Pi (map nb tp, map (nb + 1) res, info)
-
-        | Where (name, tp, exp, value) ->
-            Where (name, map nb tp, map (nb + 1) exp, map nb value)
-    in
-    map 0 t
+    let module Mon = Monadic (Monad.Identity) in
+    Monad.Identity.eval
+        (Mon.map_free
+            (fun i -> Monad.Identity.return (f i))
+            t)
 
 
 
@@ -521,63 +586,32 @@ let up_from (delta:int) (start:int) (t:t): t =
 
 
 let up (delta:int) (t:t): t =
-  assert (0 <= delta);
-  if delta = 0 then
-    t
-  else
-    up_from delta 0 t
+    assert (0 <= delta);
+    if delta = 0 then
+        t
+    else
+        up_from delta 0 t
 
 
 let up1 (t: t): t =
-  up 1 t
+    up 1 t
 
 
 
 
 let down_from (delta:int) (start:int) (t:t): t option =
-  assert (0 <= delta);
-  let rec down t nb =
-    let open Option in
-    match t with
-    | Sort _ | Value _ ->
-       Some t
-
-    | Variable i when i < nb + start->
-       Some (Variable i)
-
-    | Variable i when i < nb + start + delta ->
-       None
-
-    | Variable i ->
-       Some (Variable (i - delta))
-
-    | Typed (e, tp) ->
-       down e nb  >>= fun e ->
-       down tp nb >>= fun tp ->
-       Some (Typed (e, tp))
-
-    | Appl (f, a, mode) ->
-       down f nb >>= fun f ->
-       down a nb >>= fun a ->
-       Some (Appl (f, a , mode))
-
-    | Lambda (tp, exp, info ) ->
-       down tp nb >>= fun tp ->
-       down exp (nb + 1) >>= fun exp ->
-       Some (Lambda (tp, exp, info))
-
-    | Pi (tp, rt, info ) ->
-       down tp nb >>= fun tp ->
-       down rt (nb + 1) >>= fun rt ->
-       Some (Pi (tp, rt, info))
-
-    | Where (name, tp, exp, def) ->
-        down tp nb >>= fun tp ->
-        down exp (nb + 1) >>= fun exp ->
-        down def nb >>= fun def ->
-        Some (Where (name, tp, exp, def))
-  in
-  down t 0
+    assert (0 <= delta);
+    let module Mon = Monadic (Option) in
+    Mon.map_free
+        (fun i ->
+            if i < start then
+                Some i
+            else if start + delta <= i then
+                Some (i - delta)
+            else
+                None
+        )
+        t
 
 
 let down (delta:int) (t:t): t option =
@@ -669,51 +703,6 @@ let rec apply_nargs (f:t) (nargs:int) (mode: Application_info.t): t =
 
 
 
-(* ----------------------------------------------------------- *)
-(* Monadic functions                                           *)
-(* ----------------------------------------------------------- *)
-
-
-module Monadic (M: MONAD) =
-struct
-    let fold_free
-        (f: int -> 'a -> 'a M.t)
-        (term: t)
-        (start: 'a)
-        : 'a M.t
-        =
-        let rec fold term nb start =
-            match term with
-
-            | Value _ | Sort _ ->
-                M.return start
-
-            | Variable i when i < nb ->
-                M.return start
-
-            | Variable i ->
-                f (i - nb) start
-
-            | Typed (e, tp) ->
-                M.(fold e nb start >>= fold tp nb)
-
-            | Appl (f, a, _) ->
-                M.(fold f nb start >>= fold a nb)
-
-            | Lambda (tp, exp, _) ->
-                M.(fold tp nb start >>= fold exp (nb + 1))
-
-            | Pi (tp, rt, _) ->
-                M.(fold tp nb start >>= fold rt (nb + 1))
-
-            | Where (_, tp, exp, def) ->
-                let open M in
-                fold tp nb start
-                >>= fold exp (nb + 1)
-                >>= fold def nb
-        in
-        fold term 0 start
-end
 
 
 
