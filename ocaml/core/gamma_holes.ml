@@ -377,6 +377,7 @@ let push_hole (typ: Term.typ) (gh: t): t =
 
 let fill_hole0 (idx: int) (value: Term.t) (beta_reduce: bool) (gh: t): t =
     assert (is_unfilled idx gh);
+    assert (not (Term.has_variable idx value));
     let value = expand value gh
     and cnt    = count gh
     and nentries  = count_entries gh
