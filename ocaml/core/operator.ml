@@ -24,6 +24,7 @@ let negation          = ( 80,   Right)
 let push_arg          = (100,   Left)
 let pull_arg          = (120,   Right)
 let relation          = (140,   No)
+let addition_right    = (159,   Right)
 let addition          = (160,   Left)
 let multiplication    = (180,   Left)
 let exponentiation    = (200,   Right)
@@ -73,6 +74,7 @@ let map: (int * assoc) String_map.t
   |> add ">"   relation
   |> add "<="  relation
   |> add ">="  relation
+  |> add "+:"  addition_right
   |> add "+"   addition
   |> add "-"   addition
   |> add "*"   multiplication
