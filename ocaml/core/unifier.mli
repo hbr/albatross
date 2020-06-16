@@ -11,6 +11,12 @@ sig
     val value: int -> t -> Term.t option
 
     val fill_hole0: int -> Term.t -> bool -> t -> t
+
+    val fold_entries:
+        (int -> int -> string -> Term.typ -> bool -> Term.t option -> 'a -> 'a)
+        -> t
+        -> 'a
+        -> 'a
 end
 
 

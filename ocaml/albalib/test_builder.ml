@@ -90,28 +90,10 @@ let%test _ =
 
 
 let%test _ =
-    match build_expression "(|>)" with
-    | Ok (term, typ) ->
-        string_of_term_type term typ
-        = "(|>): all (A: Any): A -> (all (B: Any): (A -> B) -> B)"
-    | _ ->
-        false
-
-
-let%test _ =
     match build_expression "Int -> all (B: Any): (Int -> B) -> B" with
     | Ok (term, typ) ->
         string_of_term_type term typ
         = "Int -> (all (B: Any): (Int -> B) -> B): Any(1)"
-    | _ ->
-        false
-
-
-let%test _ =
-    match build_expression "'a' : Character : Any" with
-    | Ok (term, typ) ->
-        string_of_term_type term typ
-        = "('a': Character: Any): Character: Any"
     | _ ->
         false
 
@@ -139,18 +121,6 @@ let%test _ =
     match build_expression "Int -> String: Proposition" with
     | Error (_, Wrong_type _) ->
         true
-    | _ ->
-        false
-
-
-let%test _ =
-    let tp_str = "Int -> (all (B: Any): (Int -> B) -> B)"
-    in
-    match build_expression ("(|>): " ^ tp_str)  with
-    | Ok (term, typ) ->
-        string_of_term_type term typ
-        =
-        "((|>): " ^ tp_str ^ "):\n    "  ^ tp_str
     | _ ->
         false
 
