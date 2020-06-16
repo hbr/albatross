@@ -197,6 +197,8 @@ module Pretty (Gamma: GAMMA) (P: Pretty_printer.SIG) =
                 else if Char.is_letter c0
                     || c0 = '_'
                     || (2 <= len && Char.is_digit name.[1])
+                    || name = "[]"
+                    || name = "()"
                 then
                     name
                 else
