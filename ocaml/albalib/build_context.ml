@@ -9,7 +9,7 @@ type range = pos * pos
 
 
 module Algo = Gamma_algo.Make (Gamma_holes)
-module Uni  = Unifier.Make (Gamma_holes)
+module Uni  = Unifier_new.Make (Gamma_holes)
 (*module Uni  = Unifier_new.Make (Gamma_holes)*)
 
 
@@ -282,8 +282,9 @@ let final
     assert (bc.stack = []);
     assert (bc.entries = []);
     assert (bc.sp = cnt0 + 1);
-    let term = top_term bc in
-    let typ  = type_of_term term bc in
+    let term = term_at_level (cnt0 + 1) bc
+    and typ  = term_at_level cnt0 bc
+    in
     match Term.down nlocs term, Term.down nlocs typ with
     | Some term, Some typ ->
         Ok (bc, term, typ)
