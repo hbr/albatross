@@ -138,15 +138,13 @@ struct
     }
 
     let make cnt0 headers params =
-        let param0 = cnt0 + Array.length headers
-        in
         let positives =
             Array.foldi_left
                 (fun set i (_, typ) ->
                     let open Term in
                     match typ with
                     | Sort Sort.Any _ | Sort Sort.Proposition ->
-                        Int_set.add (param0 + i) set
+                        Int_set.add i set
 
                     | _ ->
                         set
@@ -165,6 +163,7 @@ struct
         d.params
 
 
+
     let headers (d: t): Inductive.Header.t array =
         d.headers
 
@@ -179,19 +178,31 @@ struct
         level < d.cnt0 + Array.length d.headers
 
 
+    let is_parameter (level: int) (d: t): bool =
+        let ntypes = Array.length d.headers in
+        d.cnt0 + ntypes <= level
+        &&
+        level < d.cnt0 + ntypes + Array.length d.params
+
+
     let positives (d: t): Int_set.t =
         d.positives
 
 
-    let remove_positive (level: int) (d: t): t =
+    let remove_positive (iparam) (level: int) (d: t): t =
         let param0 = d.cnt0 + Array.length d.headers
         and nparams = Array.length d.params
         in
-        if param0 <= level && level < param0 + nparams then
+        if
+            param0 <= level
+            && level < param0 + nparams
+            && param0 + iparam <> level (* level is not iparam *)
+        then(
             {d with
                 positives =
                     Int_set.remove (level - param0) d.positives
             }
+        )
         else
             d
 end (* Data *)
@@ -469,6 +480,7 @@ let fold_type
 
 let check_non_occurrence
     (error: unit -> Data.t result2)
+    (iparam: int) (* param allowed to occur. *)
     (term: Term.t)
     (gamma: Gamma.t)
     (data: Data.t):
@@ -482,7 +494,7 @@ let check_non_occurrence
             if Data.is_inductive level data then
                 error ()
             else
-                Ok (Data.remove_positive level data)
+                Ok (Data.remove_positive iparam level data)
         )
         term
         data
@@ -507,25 +519,36 @@ let check_constructor_argument_result_type
         | Variable idx ->
             let level = Gamma.level_of_index idx gamma in
             if Data.is_inductive level data then
-                non_occurrence args not_positive
+                (* Positive parameters can occur at proper place! *)
+                non_occurrence true args not_positive
+            else if Data.is_parameter level data && args = [] then
+                Ok data
             else begin
                 match Gamma.inductive_at_level level gamma with
                 | None ->
-                    non_occurrence args not_positive
+                    non_occurrence false args not_positive
+                        (* Positive parameters cannot occur! *)
                 | Some ind ->
                     if Inductive.count_types ind = 1 then
                         positive_occurrence ind args
                     else
-                        non_occurrence args not_positive
+                        non_occurrence false args not_positive
+                            (* Positive parameters cannot appear. *)
 
             end
         | _ ->
-            check_non_occurrence not_positive term gamma data
+            check_non_occurrence not_positive (-1) term gamma data
 
-    and non_occurrence args error =
-        List_monadic.fold_left
-            (fun (arg, _) data ->
-                check_non_occurrence error arg gamma data
+    and non_occurrence might_occur args error =
+        List_monadic.foldi_left
+            (fun iparam (arg, _) data ->
+                let iparam =
+                    if might_occur then
+                        iparam
+                    else
+                        - 1
+                in
+                check_non_occurrence error iparam arg gamma data
             )
             args
             data
@@ -541,6 +564,7 @@ let check_constructor_argument_result_type
                             range,
                             Nested_negative (ind, iparam, gamma)
                         ))
+                        (-1)
                         arg
                         gamma
                         data
@@ -565,6 +589,7 @@ let check_constructor_argument_type
         (fun data typ gamma ->
             check_non_occurrence
                 (fun _ -> Error (range, Build_problem.Negative))
+                (-1)
                 typ
                 gamma
                 data

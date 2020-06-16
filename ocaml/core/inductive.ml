@@ -1,6 +1,7 @@
 (* A pure representation of inductive types. *)
 
 open Fmlib
+open Common
 
 
 type params = (string * Term.typ) array (* Valid in the initial context. *)
@@ -144,7 +145,7 @@ type t = {
 
     params: params;
 
-    positive_params: Common.Int_set.t;
+    positive_params: Int_set.t;
 
     types: Type.t array;
 }
