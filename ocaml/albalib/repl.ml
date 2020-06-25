@@ -154,9 +154,16 @@ struct
 
         | Ok (term, typ) ->
             let term =
-                if compute then
-                    Context.compute term context
-                else
+                let term =
+                    if compute then
+                        Context.compute term context
+                    else
+                        term
+                in
+                match term with
+                | Term.Typed (term, _) ->
+                    term
+                | _ ->
                     term
             in
             let open Pretty in
