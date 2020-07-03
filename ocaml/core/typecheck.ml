@@ -202,6 +202,7 @@ let check
 
 
 
+(* TODO: turn printf statements into error messages? *)
 let is_valid_context (gamma: Gamma.t): bool =
     let cnt = Gamma.count gamma in
     let rec check_entry i =
@@ -211,6 +212,8 @@ let is_valid_context (gamma: Gamma.t): bool =
             let typ = Gamma.type_at_level i gamma in
             match Term.down (cnt - i) typ with
             | None ->
+               (* This cannot happen by construction: type_at_level calls
+                  Term.up (cnt - i) *)
                 Printf.printf "variables out of bound\n";
                 false
             | Some _ ->
@@ -223,12 +226,15 @@ let is_valid_context (gamma: Gamma.t): bool =
 
                     false
                 | Ok _ ->
+                   (* TODO: check that type is a type (and not an object) *)
                     let idx = Gamma.index_of_level i gamma in
                     match Gamma.definition_term idx gamma with
                     | None ->
                         check_entry (i + 1)
                     | Some def ->
                         match Term.down (cnt - i) def with
+                        (* This cannot happen by construction: definition_term calls
+                           Term.up (cnt - i) *)
                         | None ->
                             false
                         | Some _ ->

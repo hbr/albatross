@@ -17,7 +17,13 @@ val is_valid_context: Gamma.t -> bool
 (**
     [is_valid_context gamma]
 
-    Is the context [gamma] wellformed?
+    [gamma] is wellformed if
+    - every type is valid, i.e. it typechecks using only entries of [gamma] with a smaller level (this is true by contruction, since we are using de bruijn indices)
+    - the same holds for all definition terms
+    - {b TODO}: every type is a type (and not an object)
+
+    @return true, if [gamma] is wellformed, false otherwise
+
 *)
 
 
