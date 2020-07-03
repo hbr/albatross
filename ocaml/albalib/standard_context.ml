@@ -141,6 +141,14 @@ let add_basics (c: Context.t): Context.t =
     add_definition
         "(<|) (A: Any) (F: A -> Any) (f: all a: F a) (a: A): F a := f a"
     |>
+    add_definition
+        "(>>) (A: Any) (B: Any) (C: Any) (f: A -> B) (g: B -> C): A -> C :=
+        \n    \\x := g (f x)"
+    |>
+    add_definition
+        "(<<) (A: Any) (B: Any) (C: Any) (f: B -> C) (g: A -> B): A -> C :=
+        \n    \\x := f (g x)"
+    |>
     add_inductive
         "class Decision (a: Proposition) (b: Proposition): Any := \
         \n    left:  a -> Decision a b
