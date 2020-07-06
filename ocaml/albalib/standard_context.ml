@@ -136,10 +136,10 @@ let add_basics (c: Context.t): Context.t =
         "identity (A: Any) (a: A): A := a"
     |>
     add_definition
-        "(|>) (A: Any) (a: A) (F: A -> Any) (f: all a: F a): F a := f a"
+        "(|>) (A: Any) (a: A) (F: A -> Any) (f: all x: F x): F a := f a"
     |>
     add_definition
-        "(<|) (A: Any) (F: A -> Any) (f: all a: F a) (a: A): F a := f a"
+        "(<|) (A: Any) (F: A -> Any) (f: all x: F x) (a: A): F a := f a"
     |>
     add_definition
         "(>>) (A: Any) (B: Any) (C: Any) (f: A -> B) (g: B -> C): A -> C :=
