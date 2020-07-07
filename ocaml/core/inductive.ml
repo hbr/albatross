@@ -229,6 +229,7 @@ let constructor (i: int) (j: int) (ind: t): string * Term.typ =
     in
     let typ = push_params ntypes ind.params typ in
     name,
-    Term.up
+    Term.up_from
+        ntypes
         ind.n_up
         typ
