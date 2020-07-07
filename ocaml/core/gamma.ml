@@ -227,8 +227,7 @@ let inductive_at_level (level: int) (c: t): Inductive.t option =
     match (Sequence.elem level c.entries).definition with
     | Inductive_type (i, _) ->
        let cnt0, ind = Sequence.elem i c.inductives in
-       let ntypes = Inductive.count_types ind in
-        Some (Inductive.up (count c - cnt0 - ntypes) ind)
+        Some (Inductive.up (count c - cnt0) ind)
 
     | _ ->
         None
