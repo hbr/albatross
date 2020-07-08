@@ -184,7 +184,7 @@ val map: (int -> int) -> t -> t
 
 
 
-(** [up_from delta start t] *)
+(** [up_from start delta t] *)
 val up_from: int -> int -> t -> t
 
 
@@ -193,7 +193,7 @@ val up: int -> t -> t
 
 val up1: t -> t
 
-(** [down_from delta start t] *)
+(** [down_from start delta t] *)
 val down_from: int -> int -> t -> t option
 
 
