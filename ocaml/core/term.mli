@@ -184,15 +184,16 @@ val map: (int -> int) -> t -> t
 
 
 
-(** [up_from start delta t]: increases all free variables >= [start] in [t] by [delta] 
-    
+(** [up_from start delta t]: increases all free variables >= [start] in [t] by
+[delta]
+
     {e requires}: [0 <= delta]
  *)
 val up_from: int -> int -> t -> t
 
 
 (** [up delta t]: increases all free variables in [t] by [delta]
-    
+
     {e requires}: [0 <= delta]
  *)
 val up: int -> t -> t
@@ -200,14 +201,17 @@ val up: int -> t -> t
 (** [up1 t]: increases all free variable in [t] by 1 *)
 val up1: t -> t
 
-(** [down_from start delta t]: decreases all free variables >= [start] in [t] by [delta] if possible. Returns [None] it there is a free variable in [t] with index [i < delta].
+(** [down_from start delta t]: decreases all free variables >= [start] in [t] by
+[delta] if possible. Returns [None] it there is a free variable in [t] with
+index [i < delta].
 
     {e requires}: [0 <= delta]
  *)
 val down_from: int -> int -> t -> t option
 
 
-(** [down delta t]: decreases all free variables in [t] by [delta] if possible. Returns [None] if there is a free variable in [t] with index [i < delta].
+(** [down delta t]: decreases all free variables in [t] by [delta] if possible.
+Returns [None] if there is a free variable in [t] with index [i < delta].
 
     {e requires}: [0 <= delta]
  *)
