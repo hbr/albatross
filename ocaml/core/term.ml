@@ -575,7 +575,7 @@ let map (f: int -> int) (t: t): t =
 
 
 
-let up_from (delta:int) (start:int) (t:t): t =
+let up_from (start: int) (delta: int) (t:t): t =
     map
         (fun i ->
             if start <= i then
@@ -585,12 +585,12 @@ let up_from (delta:int) (start:int) (t:t): t =
         t
 
 
-let up (delta:int) (t:t): t =
+let up (delta: int) (t: t): t =
     assert (0 <= delta);
     if delta = 0 then
         t
     else
-        up_from delta 0 t
+        up_from 0 delta t
 
 
 let up1 (t: t): t =
@@ -599,7 +599,7 @@ let up1 (t: t): t =
 
 
 
-let down_from (delta:int) (start:int) (t:t): t option =
+let down_from (start: int) (delta: int) (t: t): t option =
     assert (0 <= delta);
     let module Mon = Monadic (Option) in
     Mon.map_free
@@ -615,7 +615,7 @@ let down_from (delta:int) (start:int) (t:t): t option =
 
 
 let down (delta:int) (t:t): t option =
-  down_from delta 0 t
+  down_from 0 delta t
 
 
 

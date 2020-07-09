@@ -184,7 +184,7 @@ val map: (int -> int) -> t -> t
 
 
 
-(** [up_from delta start t]: increases all free variables >= [start] in [t] by [delta] *)
+(** [up_from start delta t]: increases all free variables >= [start] in [t] by [delta] *)
 val up_from: int -> int -> t -> t
 
 
@@ -194,7 +194,7 @@ val up: int -> t -> t
 (** [up1 t]: increases all free variable in [t] by 1 *)
 val up1: t -> t
 
-(** [down_from delta start t] *)
+(** [down_from start delta t] *)
 val down_from: int -> int -> t -> t option
 
 

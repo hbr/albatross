@@ -406,7 +406,7 @@ let push_params
         (fun context iparam (name,typ) ->
             Context.push_local
                 name
-                (Term.up_from ntypes iparam typ)
+                (Term.up_from iparam ntypes typ)
                 context)
         context
         params

@@ -12,7 +12,7 @@ let push_params (n: int) (params: params) (res: Term.typ): Term.typ =
     zero. For a constructor type [n] must be the number of types. *)
     Array.foldi_right
         (fun iparam (name, typ) res ->
-            Term.(Pi (up_from n iparam typ, res, Pi_info.typed name)))
+            Term.(Pi (up_from iparam n typ, res, Pi_info.typed name)))
         params
         res
 
@@ -215,7 +215,7 @@ let raw_constructor (i: int) (j: int) (ind: t): string * Term.typ =
         Constructor.get ind.types.(i).constructors.(j)
     in
     name,
-    Term.up_from ind.n_up (count_params ind + count_types ind) typ
+    Term.up_from (count_params ind + count_types ind) ind.n_up typ
 
 
 
@@ -230,6 +230,6 @@ let constructor (i: int) (j: int) (ind: t): string * Term.typ =
     let typ = push_params ntypes ind.params typ in
     name,
     Term.up_from
-        ind.n_up
         ntypes
+        ind.n_up
         typ
