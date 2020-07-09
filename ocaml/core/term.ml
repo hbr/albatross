@@ -576,6 +576,7 @@ let map (f: int -> int) (t: t): t =
 
 
 let up_from (start: int) (delta: int) (t:t): t =
+    assert (0 <= delta);
     map
         (fun i ->
             if start <= i then
@@ -586,7 +587,6 @@ let up_from (start: int) (delta: int) (t:t): t =
 
 
 let up (delta: int) (t: t): t =
-    assert (0 <= delta);
     if delta = 0 then
         t
     else
