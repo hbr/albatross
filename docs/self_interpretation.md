@@ -1,5 +1,9 @@
+Results for Computability Theory
+================================
+
+
 Language Definition
-===================
+-------------------
 
 
 Definition:
@@ -34,7 +38,7 @@ Definition:
 
 
 Implementation of Functions
-===========================
+---------------------------
 
 Definition:
 
@@ -57,7 +61,7 @@ Definition:
 
 
 Interpretation of a Language
-============================
+----------------------------
 
 Definition:
 
@@ -71,7 +75,7 @@ Definition:
 
 
 In this definition we use a pairing function `<n,m>` which maps each pair of
-natural numbers one-to-one into a natural number.
+natural numbers one-to-one to a natural number.
 
 Furthermore we don't use equality in this definition. We use equivalence. I.e.
 if `eval1(u, <n,m>)` is undefined, then `eval2(n, m)` is undefined as well and
@@ -91,14 +95,14 @@ for all valid programs `n`.
 
 
 Total Languages cannot interpret themselves
-===========================================
+-------------------------------------------
 
 
 In the following we prove the fact that a total language cannot interpret
 itself as long as it implements at least the successor function and the diagonal
 function and is closed under composition.
 
-Assume that `L = (P, eval)` is a total function which has an interpreter program
+Assume that `L = (P, eval)` is a total language which has an interpreter program
 `u` which implements self interpretation.
 
 Therefore we get for all valid programs `n` and all natural numbers `m`
@@ -150,3 +154,111 @@ Now we form `eval(u, <F,F>)` and get
 This is a contradiction because a number and its successor cannot be equal.
 Therefore our assumptions are wrong and either the language `L` is not total or
 the language does not interpret itself.
+
+
+
+
+
+
+
+Compiling
+=========
+
+Machine Language
+----------------
+
+We assume that we have a machine language
+```
+    LM = (PM, evalM)
+```
+
+whose programs are numbers representing a programs in machine language which can
+implement one argument functions on natural numbers.
+
+Cleary the machine language is not total. I.e. there are machine programs `n`
+such that `evalM(n, m)` is not defined for all `m`.
+
+The machine is basically a computer which executes a machine program given as a
+file which we represent here by a natural numbers on a certain input file, which
+we represent by an natural number as well, and outputs another file which we
+represent by a natural number as well.
+
+
+
+
+Language Definition with a Compiler
+-----------------------------------
+
+We want to write programs in some higher level language `A`. In order to compile
+`A` sources into machine code, we write a program `C_AM` which is a machine
+program (i.e. an element of `PM`). The compiler `C_AM` implements a total
+function mapping natural numbers to pairs.
+
+```
+                         /  <1, T_A>,   if S_A is a valid A source
+    evalM(C_AM, S_A) ~> |
+                         \  <0,0>,      otherwise
+```
+
+Since `evalM` is a computable function and `C_AM` implements a total function,
+we have a decision procedure to check programs written in the language `A`, i.e.
+we know the set `PA` of valid programs in the `A` language.
+
+In case of success, the compiler returns a number `T_A` which is a valid machine
+program representing the source program `S_A`.
+
+
+In order to complete the language definition we need an evaluation function.
+
+```
+    evalA(S_A, m) :=
+        evalM(
+            second (evalM(C_AM, S_A)),
+            m
+        )
+```
+
+This completes the definition of the programming language `A`
+```
+    LA = (PA, evalA)
+```
+
+The so defined language is total, if its evaluation function is total i.e. if
+all valid programs implement a (total) function.
+
+
+
+
+Implement a Compiler in its own Language
+----------------------------------------
+
+What does it mean to implement a compiler of a high level language in its own
+language?
+
+Let's call such a compiler `C_AA` which is a compiler of language `A` written in
+`A` i.e. `C_AA` is an element of `PA`.
+
+If `C_AA` really implements a compiler of `A`, then the following equivalence
+must be valid
+
+```
+    evalA(C_AA, S_A) ~  evalM(C_AM, S_A)
+```
+
+I.e. both `C_AA` and `C_AM` must compile the same source code `S_A` into the
+same target code `T_A` if `S_A` is a valid `A` program or both fail on the
+input, if `S_A` is not a valid `A` program.
+
+
+
+Open Question
+-------------
+
+Given a compiler `C_AA` written in its own language. Is it possible to write an
+interpreter `u` in `PA` which interprets `LA`?
+
+If the answer to this question is yes, then a compiler for a total language
+cannot be written in its own language.
+
+More general: Assuming that `C_AA` exists and `LA` is total. Does this lead to a
+contradiction?
