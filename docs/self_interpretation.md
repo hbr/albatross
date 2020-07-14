@@ -14,7 +14,7 @@ Definition:
 >       eval: P x N -> N
 
 >   which is a partial function. It is decidable, if a natural number is a
-    program, i.e. there is a computable function valid: `N -> {0,1}` where `valid
+    program, i.e. there is a total computable function `valid: N -> {0,1}` where `valid
     (n) = 1` means that `n` is a valid program.
 
 We define programs in the domain of natural numbers. This is not a restriction,
@@ -28,7 +28,7 @@ This is not a restriction either for the same argument.
 Note that partial functions are functional relations, i.e. `r n m1` and
 `r n m2` imply `m1 = m2` when `r` is a functional relation. A relation is left
 total, if for all `x` in its domain there is a `y` such that `r x y`. Therefore
-a functional, left-total relation represents a function.
+a functional, left-total relation represents a total function.
 
 Definition:
 
