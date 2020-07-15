@@ -269,13 +269,21 @@ If `C_ABA` really implements a compiler of `A`, then the following equivalence
 must be valid
 
 ```
-    evalA(C_ABA, S_A) ~  evalB(C_ABC, S_A)
+    evalA(C_ABA, S_A) ~  evalC(C_ABC, S_A)
 ```
 
 I.e. both `C_ABA` and `C_ABC` must compile the same source code `S_A` into the
 same target code `T_A` if `S_A` is a valid `A` program or both fail on the
 input, if `S_A` is not a valid `A` program.
 
+This is a very strong requirement. Instead of requiring the target code `T_A`
+to be the same for both compilers, it would probably be sufficient to require that
+the target codes **behaves** the same, i.e. for every input `m` they return the
+same output:
+
+```
+    evalB(evalA(C_ABA, S_A), m) ~ evalB(evalC(C_ABC, S_A), m)
+```
 
 
 Open Question
