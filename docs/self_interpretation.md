@@ -189,42 +189,66 @@ represent by a natural number as well.
 Language Definition with a Compiler
 -----------------------------------
 
-We want to write programs in some higher level language `A`. In order to compile
-`A` sources into machine code, we write a program `C_AM` which is a machine
-program (i.e. an element of `PM`). The compiler `C_AM` implements a total
-function mapping natural numbers to pairs.
+Definition:
+
+>   A compiler from language `A = (PA, evalA)` to language `B = (PB, evalB)`
+>   written in language `C = (PC, evalC)` is a program `C_ABC` from `PC` which
+>   takes as input a program `S_A` from `PA` and produces a program `T_A` from
+>   `PB` as output.
+
+>   If `A`, `B` and `C` are given, the following should hold for all natural
+>   numbers `m` and all valid programs `S_A`:
+
+>       evalA(S_A, m) ~ evalB(evalC(C_ABC, S_A), m)
+
+If we want the compiler `C_ABC` to implement a total function, we can slightly
+modify the previous definition and require that `C_ABC` implements the function
+`f_ABC` with
 
 ```
-                         /  <1, T_A>,   if S_A is a valid A source
-    evalM(C_AM, S_A) ~> |
-                         \  <0,0>,      otherwise
+                   /  <1, T_A>,   if S_A in PA
+    f_ABC := p -> |
+                   \  <0,0>,      otherwise
 ```
 
-Since `evalM` is a computable function and `C_AM` implements a total function,
-we have a decision procedure to check programs written in the language `A`, i.e.
-we know the set `PA` of valid programs in the `A` language.
+Since `PA` is decidable, `f_ABC` is total and hence `evalC(C_ABC, p)` is defined
+for all natural numbers `p` and we require
 
-In case of success, the compiler returns a number `T_A` which is a valid machine
-program representing the source program `S_A`.
+```
+    evalA(S_A, m) ~ evalB(second(evalC(C_ABC, S_A)), m)
+```
+to hold for all natural numbers `m` and all valid programs `S_A`.
 
+We can also **define** a language `A = (PA, evalA)` by a compiler `C_ABC`. The
+compiler takes as input a natural number `p` and produces a program `T_A` in
+target language `B` (e.i. an element of `PB`) or outputs an error.
 
-In order to complete the language definition we need an evaluation function.
+The compiler `C_ABC` distinguishes success and error by implementing a total function
+
+```
+    f_ABC: N -> <1,PB> V <0,0>
+```
+
+We can now define the language `A=(PA, evalA)` as follows:
+
+```
+    PA := { n in N | first(evalC(C_ABC, n)) = 1 }
+```
+Since `f_ABC` is total, `PA` is decidable.
 
 ```
     evalA(S_A, m) :=
-        evalM(
-            second (evalM(C_AM, S_A)),
+        evalB(
+            second(evalC(C_ABC, S_A)),
             m
         )
 ```
 
-This completes the definition of the programming language `A`
-```
-    LA = (PA, evalA)
-```
+This completes the definition of the language `A = (PA, evalA)`.
 
-The so defined language is total, if its evaluation function is total i.e. if
-all valid programs implement a (total) function.
+Language `A` is total if its evaluation function `evalA` is total. Since we did
+not require `B` to be a total language, `evalA` is total iff `evalC(C_ABC, S_A)`
+does only produce target code `T_A` in `PB` which implements a total function.
 
 
 
@@ -235,17 +259,20 @@ Implement a Compiler in its own Language
 What does it mean to implement a compiler of a high level language in its own
 language?
 
-Let's call such a compiler `C_AA` which is a compiler of language `A` written in
-`A` i.e. `C_AA` is an element of `PA`.
+In this case the source language and the implementing language are the same, so
+we call such a compiler `C_ABA`. `C_ABA` is a compiler from source language `A`
+to target language `B` written in the source language `A`, i.e. `C_ABA` is an
+element of `PA`.
 
-If `C_AA` really implements a compiler of `A`, then the following equivalence
+Let language `A = (PA, evalA)` be defined by the compiler `C_ABC`.
+If `C_ABA` really implements a compiler of `A`, then the following equivalence
 must be valid
 
 ```
-    evalA(C_AA, S_A) ~  evalM(C_AM, S_A)
+    evalA(C_ABA, S_A) ~  evalB(C_ABC, S_A)
 ```
 
-I.e. both `C_AA` and `C_AM` must compile the same source code `S_A` into the
+I.e. both `C_ABA` and `C_ABC` must compile the same source code `S_A` into the
 same target code `T_A` if `S_A` is a valid `A` program or both fail on the
 input, if `S_A` is not a valid `A` program.
 
