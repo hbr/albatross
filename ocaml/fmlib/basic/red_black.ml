@@ -81,6 +81,50 @@ struct
         Node (color, left, p, right)
 
 
+    let is_empty (tree: 'a t): bool =
+        match tree with
+        | Empty ->
+            true
+        | _ ->
+            false
+
+
+    let fold_right (f: Key.t -> 'a -> 'b -> 'b) (tree: 'a t) (start: 'b): 'b =
+        let rec fld tree start =
+            match tree with
+            | Empty ->
+                start
+            | Node (_, left, (k,v), right) ->
+                fld left (f k v (fld right start))
+        in
+        fld tree start
+
+
+
+    let fold (f: Key.t -> 'a -> 'b -> 'b) (tree: 'a t) (start: 'b): 'b =
+        let rec fld start tree =
+            match tree with
+            | Empty ->
+                start
+            | Node (_, left, (k,v), right) ->
+                fld (f k v (fld start left)) right
+        in
+        fld start tree
+
+
+    let cardinal (tree: 'a t): int =
+        fold
+            (fun _ _ sum -> sum + 1)
+            tree
+            0
+
+    let bindings (tree: 'a t): (Key.t * 'a) list =
+        fold_right
+            (fun k v lst -> (k,v) :: lst)
+            tree
+            []
+
+
     let maybe_find (k: Key.t) (tree: 'a t): 'a option =
         let rec find tree =
             match tree with
@@ -99,6 +143,18 @@ struct
         find tree
 
 
+    let find (k: Key.t) (tree: 'a t): 'a =
+        match maybe_find k tree with
+        | None ->
+            assert false (* Illegal call! *)
+        | Some value ->
+            value
+
+
+    let mem (k: Key.t) (tree: 'a t): bool =
+        maybe_find k tree <> None
+
+
 
 
     let rec check_invariant (t: 'a t): (int * color) option =
@@ -113,11 +169,18 @@ struct
                     match color, c1, c2 with
                     | Red, Black, Black ->
                         Some (h1, Red)
+
                     | Red, _, _ ->
+                        (* Violation: A red parent has at least one red child.
+                         *)
                         None
+
                     | Black, _, _ ->
                         Some (h1 + 1, Black)
+
                 else
+                    (* Violation: The black height of the children is different.
+                     *)
                     None
             )
 
@@ -128,7 +191,7 @@ struct
         | None ->
             false
         | Some _ ->
-                true
+            true
 
 
 
@@ -350,6 +413,58 @@ struct
             )
 
 
+    let use_right_sibling
+            (black1: 'a t -> 'a pair -> 'a t -> 'b)
+            (black2: 'a t -> 'a pair -> 'a t -> 'a pair -> 'a t -> 'b)
+            (red1:  'a t -> 'a pair -> 'a t -> 'a pair -> 'a t -> 'b)
+            (red2:  'a t -> 'a pair -> 'a t -> 'a pair -> 'a t ->
+                    'a pair -> 'a t -> 'b)
+            (tree: 'a t)
+        : 'b =
+        (* Mirror image of [use_left_sibling].
+         * [tree] is black:
+         *
+         *          Bz                          Bz
+         *      Bc      d                   Ry      d
+         *                               Bb   Bc
+         *
+         * [tree] is red:
+         *
+         *          Rz                          Rz
+         *      By      d+                  By      d+
+         *   Bb    c                    Rx     c
+         *                           Ba   Bb
+         *)
+        match tree with
+        | Empty ->
+            (* Cannot happen. [tree] has black height [h+1]. An empty node is
+             * not possible. *)
+            assert false
+
+        | Node (Black, left, z, d) ->
+            (
+                match left with
+                | Node (Red, b, y, c) ->
+                    black2 b y c z d
+                | _ ->
+                    black1 left z d
+            )
+
+        | Node (Red, left, z, d) ->
+            (
+                match left with
+                | Node (Black, Node (Red, a, x, b), y, c) ->
+                    red2 a x b y c z d
+                | Node (Black, b, y, c) ->
+                    red1 b y c z d
+                | _ ->
+                    (* Cannot happen. [left] must be black, because its parent
+                     * is red. Since the black height is [h+1], [left] cannot
+                     * be empty either. *)
+                    assert false
+            )
+
+
     let use_left_sibling_black_parent
         (left: 'a t) (p: 'a pair) (reduced: 'a t) (deleted: 'a pair)
         : 'a removed
@@ -360,21 +475,17 @@ struct
         use_left_sibling
             (fun a x b_black ->
                  RMinus ( (* black height h + 1 *)
-                     Node (
-                         Black,
-                         a,
-                         x,
-                         Node (Red, b_black, p, reduced)
-                     ),
-                     deleted
-                 ))
-            (fun a x b y c ->
+                     Node (Black, a, x,
+                           Node (Red, b_black, p, reduced))
+                     , deleted)
+            )
+            (fun a x b y cblack ->
                  ROk ( (* black height: h + 2 *)
                      Node (
                          Black,
                          Node (Black, a, x, b),
                          y,
-                         Node (Black, c, p, reduced)),
+                         Node (Black, cblack, p, reduced)),
                      deleted))
             (fun aplus x b y c_black ->
                  ROk ( (* black height: h + 2 *)
@@ -383,13 +494,13 @@ struct
                                  Node (Red, c_black, p, reduced))),
                      deleted
                  ))
-            (fun aplus x b y c z d ->
+            (fun aplus x b y c z dblack ->
                  ROk (  (* black height: h + 2 *)
                      Node (Black, aplus, x,
                            Node (Red,
                                  Node (Black, b, y, c),
                                  z,
-                                 Node (Black, d, p, reduced))),
+                                 Node (Black, dblack, p, reduced))),
                      deleted))
             left
 
@@ -416,39 +527,97 @@ struct
                            Node (Black, c, p, reduced)),
                      deleted))
             (fun _ _ _ _ ->
-                 (* Cannot be red. *)
+                 (* [left] cannot be red. *)
                  assert false)
             (fun _ _ _ _ _ ->
-                 (* Cannot be red. *)
+                 (* [left] cannot be red. *)
                  assert false)
             left
 
 
     let use_right_sibling_black_parent
-        (_: 'a t) (_: 'a pair) (_: 'a pair) (_: 'a t)
+        (reduced: 'a t) (deleted: 'a pair) (p: 'a pair) (right: 'a t)
         : 'a removed
         =
         (* black_height(reduced):   h
          * black_height(right):     h + 1
          * black height goal:       h + 2 *)
-        assert false
+        use_right_sibling
+            (fun cblack z d ->
+                 RMinus (
+                     Node (Black,
+                           Node (Red, reduced, p, cblack),
+                           z, d)
+                     , deleted)
+            )
+            (fun bblack y c z d ->
+                 ROk (Node (Black,
+                            Node (Black, reduced, p, bblack),
+                            y,
+                            Node (Black, c, z, d))
+                     , deleted)
+            )
+            (fun bblack y c z dplus ->
+                 ROk (Node (Black,
+                            Node (Black,
+                                  Node (Red, reduced, p, bblack),
+                                  y, c),
+                            z, dplus),
+                      deleted)
+            )
+            (fun ablack x b y c z dplus ->
+                 ROk (Node (Black,
+                            Node (Red,
+                                  Node (Black, reduced, p, ablack),
+                                  x,
+                                  Node (Black, b, y, c)),
+                            z, dplus),
+                      deleted)
+            )
+            right
 
 
 
     let use_right_sibling_red_parent
-        (_: 'a t) (_: 'a pair) (_: 'a pair) (_: 'a t)
+        (reduced: 'a t) (deleted: 'a pair) (p: 'a pair) (right: 'a t)
         : 'a removed
         =
         (* black_height(reduced):   h
          * black_height(right):     h + 1
          * black height goal:       h + 1 *)
-        assert false
+        use_right_sibling
+            (fun cblack z d ->
+                 ROk (
+                     Node (Black,
+                           Node (Red, reduced, p, cblack),
+                           z, d),
+                     deleted
+                 )
+            )
+            (fun b y c z d ->
+                 ROk (
+                     Node (Red,
+                           Node (Black, reduced, p, b),
+                           y,
+                           Node (Black, c, z, d)),
+                     deleted
+                 )
+            )
+            (fun _ _ _ _ ->
+                 (* [right] cannot be red. *)
+                 assert false)
+            (fun _ _ _ _ _ ->
+                 (* [right] cannot be red. *)
+                 assert false)
+            right
 
 
 
     let removed_left
             (color: color) (reduced: 'a removed) (p: 'a pair) (right: 'a t)
             : 'a removed =
+        (* The left child has a potentially reduced black height compared to
+         * its right sibling. *)
         match reduced with
         | ROk (left, x) ->
             ROk (Node (color, left, p, right), x)
@@ -470,6 +639,8 @@ struct
     let removed_right
             (color: color) (left: 'a t) (p: 'a pair) (reduced: 'a removed)
             : 'a removed =
+        (* The right child has a potentially reduced black height compared to
+         * its left sibling. *)
         match reduced with
         | ROk (right, x) ->
             ROk (Node (color, left, p, right), x)
@@ -582,7 +753,17 @@ struct
 
     let add (e: Element.t) (set: t): t =
         Map.add e () set
+
+    let mem (e: Element.t) (set: t): bool =
+        Map.mem e set
+
+    let remove (e: Element.t) (set: t): t =
+        Map.remove e set
 end
+
+
+
+
 
 
 
@@ -592,33 +773,120 @@ end
 
 module M = Map (Int)
 
-let insert (n: int): int M.t =
+let ins (n: int) (map: int M.t): int M.t =
     let rec ins i map =
         if i = n then
             map
         else
             ins (i + 1) (M.add i i map)
     in
-    ins 0 M.empty
+    ins 0 map
 
-let rec check (n: int) (map: int M.t): bool =
-    if n = 0 then
-        true
-    else
-        let n = n - 1 in
-        let res = M.maybe_find n map in
-        match res with
-        | None ->
-            Printf.printf "nothing found for %d\n" n;
-            false
-        | Some k ->
-            if n <> k then
-                Printf.printf "found wrong pair %d %d\n" n k;
-            check n map
+
+let insert (n: int): int M.t =
+    ins n M.empty
+
+
+let check (start: int) (beyond: int) (map: int M.t): bool =
+    let rec check_from i =
+        if i = beyond then
+            true
+        else
+            let res = M.maybe_find i map in
+            match res with
+            | None ->
+                Printf.printf "nothing found for %d\n" i;
+                false
+            | Some k ->
+                if i <> k then
+                    Printf.printf "found wrong pair %d %d\n" i k;
+                check_from (i + 1)
+    in
+    check_from start
+
+
+
+let string_of_bindings (tree: int M.t): string =
+    let open Printf
+    in
+    sprintf "[%s]"
+        (String.concat ","
+             (List.map
+                  (fun (k,v) -> sprintf "(%d,%d)" k v)
+                  (M.bindings tree)))
+
+let _ = string_of_bindings
+
 
 
 let%test _ =
-    check 100 (insert 100)
+    let n = 100
+    in
+    let rec test_from i map =
+        if i = n then
+            true
+        else
+            let map = M.add i i map
+            in
+            M.is_balanced map &&
+            test_from (i + 1) map
+    in
+    test_from 0 M.empty
+
+
 
 let%test _ =
-    M.is_balanced (insert 100)
+    let n = 100
+    in
+    check 0 n (insert n)
+
+
+
+let%test _ =
+    let n = 10
+    in
+    check 0 n (ins n (insert n))
+
+
+let%test _ =
+    let n = 20
+    in
+    let rec test_from i map =
+        let check_not_in map =
+            match M.maybe_find i map with
+            | None ->
+                true
+            | Some k ->
+                Printf.printf "deleted pair (%d,%d) still in\n" i k;
+                false
+        and check_rest map =
+            let res = check (i + 1) n map
+            in
+            if not res then
+                Printf.printf "some values below %d not available\n" i;
+            res
+        and  remove map =
+            let map = M.remove i map in
+            (*Printf.printf "bindings %s\n" (string_of_bindings map);
+            Printf.printf "cardinal %d\n" (M.cardinal map);*)
+            map
+        and check_invariant map =
+            let res = M.is_balanced map in
+            if not res then
+                Printf.printf "invariant violated after deleting %d\n" i;
+            res
+        in
+        if i = n then
+            true
+        else
+            let map = remove map
+            in
+            check_not_in map
+            &&
+            check_rest map
+            &&
+            check_invariant map
+            &&
+            test_from (i + 1) map
+    in
+    test_from 0 (insert n)
