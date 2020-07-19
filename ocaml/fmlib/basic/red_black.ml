@@ -1,49 +1,6 @@
 open Module_types
 
 
-module Gadt (Key: SORTABLE) =
-struct
-    type zero =
-      | Z
-
-    type 'a succ =
-      | S of 'a
-
-
-    type _ nat =
-      | Zero: zero nat
-      | Succ: 'a nat -> 'a succ nat
-
-
-    type red =
-      | R
-
-    type black =
-      | B
-
-    type color =
-      | Red of red
-      | Black of black
-
-
-
-    type (_,_) rbt =
-      | Empty: (black, zero nat) rbt
-
-      | RNode:
-            (black, 'h nat) rbt * Key.t * (black, 'h nat) rbt
-            -> (red, 'h nat) rbt
-
-      | BNode:
-            (_, 'h nat) rbt * Key.t * (_, 'h nat) rbt
-            -> (black, 'h succ nat) rbt
-end
-
-
-
-
-
-
 
 module Map (Key: SORTABLE) =
 struct
@@ -747,6 +704,12 @@ struct
     module Map = Map (Element)
 
     type t = unit Map.t
+
+    let is_empty (set: t): bool =
+        Map.is_empty set
+
+    let cardinal (set: t): int =
+        Map.cardinal set
 
     let empty: t =
         Map.empty

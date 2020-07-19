@@ -19,6 +19,8 @@ module Result = Result
 
 module Finite_map = Finite_map
 
+module Red_black = Red_black
+
 module Sequence = Sequence
 
 module Readable_printer = Readable_printer
