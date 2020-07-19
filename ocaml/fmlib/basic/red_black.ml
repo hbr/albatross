@@ -395,10 +395,73 @@ struct
 
 
 
-    let removed_left
-            (_: color) (_: 'a removed) (_: 'a pair) (_: 'a t)
-            : 'a removed =
+    let use_left_sibling_red_parent
+        (left: 'a t) (p: 'a pair) (reduced: 'a t) (deleted: 'a pair)
+        : 'a removed
+        =
+        (* black_height(left):      h + 1
+         * black_height(reduced):   h
+         * black height goal:       h + 1 *)
+        use_left_sibling
+            (fun a x bblack ->
+                 ROk ( (* black height: h + 1 *)
+                    Node (Black, a, x,
+                          Node (Red, bblack, p, reduced)),
+                    deleted))
+            (fun a x b y c ->
+                 ROk ( (* black height: h + 1 *)
+                     Node (Red,
+                           Node (Black, a, x, b),
+                           y,
+                           Node (Black, c, p, reduced)),
+                     deleted))
+            (fun _ _ _ _ ->
+                 (* Cannot be red. *)
+                 assert false)
+            (fun _ _ _ _ _ ->
+                 (* Cannot be red. *)
+                 assert false)
+            left
+
+
+    let use_right_sibling_black_parent
+        (_: 'a t) (_: 'a pair) (_: 'a pair) (_: 'a t)
+        : 'a removed
+        =
+        (* black_height(reduced):   h
+         * black_height(right):     h + 1
+         * black height goal:       h + 2 *)
         assert false
+
+
+
+    let use_right_sibling_red_parent
+        (_: 'a t) (_: 'a pair) (_: 'a pair) (_: 'a t)
+        : 'a removed
+        =
+        (* black_height(reduced):   h
+         * black_height(right):     h + 1
+         * black height goal:       h + 1 *)
+        assert false
+
+
+
+    let removed_left
+            (color: color) (reduced: 'a removed) (p: 'a pair) (right: 'a t)
+            : 'a removed =
+        match reduced with
+        | ROk (left, x) ->
+            ROk (Node (color, left, p, right), x)
+
+        | RMinus (reduced, deleted) ->
+            match color with
+            | Black ->
+                use_right_sibling_black_parent
+                    reduced deleted p right
+
+            | Red ->
+                use_right_sibling_red_parent
+                    reduced deleted p right
 
 
 
@@ -415,32 +478,13 @@ struct
             match color with
             | Black ->
                 use_left_sibling_black_parent
-                    left
-                    p
-                    reduced
-                    deleted
+                    left p reduced deleted
 
             | Red ->
-                (* black_height(left):      h + 1
-                 * black_height(reduced):   h
-                 * black height goal:       h + 1 *)
-                use_left_sibling
-                    (fun _ _ _ -> assert false)
-                    (fun _ _ _ _ ->
-                         assert false)
-                    (fun _ _ _ _ ->
-                         (* Cannot be red. *)
-                         assert false)
-                    (fun _ _ _ _ _ ->
-                         (* Cannot be red. *)
-                         assert false)
-                    left
+                use_left_sibling_red_parent
+                    left p reduced deleted
 
 
-
-
-    let remove_leftmost (_: 'a t): 'a removed option =
-        assert false
 
 
     let remove_bottom (color: color) (x: 'a pair) (child: 'a t): 'a removed =
@@ -466,6 +510,20 @@ struct
              * children. *)
             assert false
 
+
+
+    let rec remove_leftmost (tree: 'a t): 'a removed option =
+        match tree with
+        | Empty ->
+            None
+
+        | Node (color, Empty, x, right) ->
+            Some (remove_bottom color x right)
+
+        | Node (color, left, x, right) ->
+            Option.map
+                (fun left -> removed_left color left x right)
+                (remove_leftmost left)
 
 
     let rec remove_aux (k: Key.t) (tree: 'a t): 'a removed option =
