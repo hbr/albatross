@@ -1,7 +1,39 @@
+<!-- Global site tag (gtag.js) - Google Analytics -->
+<script async src="https://www.googletagmanager.com/gtag/js?id=UA-168044895-2">
+</script>
+
+<script>
+  window.dataLayer = window.dataLayer || [];
+  function gtag(){dataLayer.push(arguments);}
+  gtag('js', new Date());
+
+  gtag('config', 'UA-168044895-2');
+</script>
+
+
 **Insertion and Deletion in Red Black Trees**
 
-The algorithm described here is implemented
-[here](../ocaml/fmlib/basic/red_black.ml)
+An algorithm for insertion and deletion in a red black tree in a functional
+setting is described. The description provides evidence for the correctness of
+the algorithm.
+
+A red black tree is not a trivial data structure. If you read the wikipedia
+article, you have the impression, that insertion and deletion are really very
+complicated, because there are many cases to distinguish. Especially deletion
+seems to be mind bending.
+
+In this article we describe an algorithm which reduces to necessary case
+analysis to a minimum. We try to make the cases as orthogonal as
+possible, to make them comprehensible.
+
+Furthermore we provide evidence for the correctness of each step.
+
+
+
+> Link to an implementation of the described algorithm in Ocaml.
+
+>   [**Implementation**](https://github.com/hbr/albatross/blob/feature/ocaml/fmlib/basic/red_black.ml)
+
 
 
 Basics
@@ -16,7 +48,7 @@ info element and a right son.
 Each node has a color and the empty tree is considered black with a black height
 of zero.
 
-A definition is a functional language like ocaml looks like
+A definition in a functional language like ocaml looks like
 ```ocaml
     type info = ... (* type of the information element, must be sortable *)
 
@@ -26,8 +58,8 @@ A definition is a functional language like ocaml looks like
 ```
 
 Insertion and deletion is always done at the bottom. We insert a node by
-replacing an empty tree by a singleton red node. We delete a node by replacing a
-singleton node (i.e. a node with two empty sons) by an empty node.
+replacing an empty tree with a singleton red node. We delete a node by replacing
+a singleton node (i.e. a node with two empty sons) with an empty node.
 
 
 Invariant
@@ -51,6 +83,11 @@ Examples:
     one red node:
 
             Rx
+
+    red node with children (only two black children possible):
+
+            Ry
+        Bx      Bz
 
     black node with one or two children:
 
@@ -147,7 +184,7 @@ either in state 1, 2 or 3 as well.
 1. Insertion into `left` created a new tree `Node(Red, a, x, b)` and `a` and `b`
    have the black height of the original tree `left`.
 
-   - color = Black: We create `node(Black, Node(Red,a,x,b), info, right)` and
+   - color = Black: We create `Node(Black, Node(Red,a,x,b), info, right)` and
      end in state 2.
 
    - color = Red: We cannot create a new valid red black tree. Therefore we end
@@ -166,11 +203,10 @@ either in state 1, 2 or 3 as well.
 
 During insertion we have the following state diagramm.
 ```
-                        --
-                       /  \
+                      ++++++
                       |    |
                       v    |
-       1   ------->   2 --/
+       1   ------->   2 ++++
        ^   \
        |    \
        |     ----->   3
@@ -221,3 +257,206 @@ efficient, because
 Deletion
 ========
 
+Deletion in a red black tree is more complicated than insertion. There are two
+difficulties to master:
+
+- The info element to be deleted might be located in an interior node which has
+  two non-empty sons. We cannot just remove the node, because we cannot insert
+  the two sons into the parent.
+
+- Deletion in one of the sons of a node might reduce the black height of the
+  son. Therefore the son with the deletion is no longer in balance with respect
+  to black height with its sibling.
+
+Fortunately we can separate the two issues and solve them without interference.
+
+
+
+Deletion of an Interior Node
+----------------------------
+
+If the interior node has two non-empty sons, we cannot deleted the node. However
+having two non-empty sons, the leftmost element in the right son is a direct
+neighbor of the info element of the interior node in the order relation. We can
+delete the leftmost element and replace the info element of the interior node
+with the info element of the deleted leftmost node.
+
+However the node with the leftmost info element in the order relation might not
+be the leftmost node in the right son. Let `Node(color, left, x, right)` be the
+interior node to be deleted (i.e. `x` is the info element to be removed), then
+we can have the following situation.
+
+```
+                    x
+                              right
+                             .
+                            .
+                           y
+                     empty   z
+```
+The lefmost info element in the order relation is `z`, but the node carrying the
+info element is not a singleton tree. The solution is simple: We remove the
+bottom node carrying `z` and replace `y` with `z` and continue as if a node with
+info element `y` had been deleted.
+
+This procedure leads to the following requirement:
+
+A removal function which removes an info element of a red black tree must return
+and optional pair. The pair consists of a new tree where a node has been deleted
+and the info element which has been deleted.
+
+For removal we need two functions:
+
+- `remove_leftmost tree: optional (tree,deleted)`
+
+- `remove element tree: optional (tree,deleted)`
+
+We can call `remove_leftmost` on an empty tree. In that case the function
+returns nothing. I.e. we get an implicit test, if `right` is empty or not.
+
+
+Deletion Invariant
+------------------
+
+Successful deletion of an element in a valid red black tree results in one of
+the following two states:
+
+1. The new tree has the same black height as the original tree and its color
+   remains the same or has been changed from red to black.
+
+2. The new tree has a black height reduced by one. Its color is black and has
+   not been changed.
+
+
+Note that state 1 does not create any problems. We can insert the new tree into
+the parent node. It has the same black height, therefore both sons still have
+the same black height. Its color might have changed from red to black, therefore
+cannot create a red violation.
+
+State 2 is the problematic one. Since the black height has been reduced by one,
+we cannot reinsert the new tree into its parent node. Its sibling has a
+different black height. However the reduced tree is consistent. Since its color
+is black and unchanged, it does not create any red violation.
+
+In state 2 we have to reorganize the sibling and the parent to end up in state 1
+or 2.
+
+
+Deletion of a Singleton Node
+----------------------------
+
+Deletion of a singleton node initializes the invariant.
+
+If the deleted node is red, we start in state 1. The black height is the same
+(zero). Its color has changed from red to black.
+
+If the deleted node is black, we start in state 2. Its black height has reduced
+by one (from 1 to 0) and its color is unchanged and black.
+
+
+
+
+Deletion in a Son
+-----------------
+
+Let's assume we have `Node(color, left, info, right)` and have successfully
+deleted one info element in the right son getting back `rnew` either in state 1
+or state 2 (we describe only deletion in the right son; deletion in the left son
+is symmetrical). The black height of `rnew` is `h >= 0` which depending on the
+state is either reduced or not.
+
+State 1 is trivial. We return `Node(color, left, info, rnew)` in state 1.
+
+In state 2 we have to analyze the sibling `left` in order to see, how we can
+reorganize the tree.
+
+We know that the black height of `left` is `h + 1`, because we are in state 2.
+We split up `left` to get subtrees of black height `h` or `h + 1`. We want a
+right subtree of `left` which is black and has the black height `h` in order to
+combine it with `rnew` without problems.
+
+We have to distinguish the following four cases for `left`.
+
+```
+        Bx                                  Bx
+    a       Bb                          a       Ry
+                                              Bb   Bc
+
+
+        Rx                                  Rx
+    Ba+     By                          Ba+     By
+          b   Bc                              b     Rz
+                                                  Bc   Bd
+```
+Since `left` is a valid red black tree with black height `h + 1`, there are no
+other possibilities. So we have the four ordered sequences
+
+```
+    a x Bb
+
+    a x y b Bc
+
+    a+ x b y Bc
+
+    a+ x b y z Bd
+```
+where the rightmost subtree is always black (indicated by `B`). The subtrees
+`a`, `b`, `c` and `d` have all a black height of `h` except for the last two
+sequences, where `a` has a black height of `h + 1` (indicated by `+`).
+
+
+Now we have to do a case analysis distinguishing the two possible colors of the
+parent node and combine the cases with the possible four cases of the sibling.
+
+
+**Parent color is red:**
+
+The sibling cannot be red. Therefore we have to consider only the first two
+cases of the sibling.
+
+We can create in both cases a new parent which has black height `h + 1` and
+whose color is either unchanged or changed from red to black. I.e. we end in
+state 1. Here are the two possibilities for the new parent node. It is not
+difficult to verify the invariants of the red black tree and the conditions for
+reaching state 1.
+
+```
+                Bx                          <-- h + 1; state 1
+            a       Rinfo
+                   Bb   rnew
+
+
+                Ry                          <-- h + 1; state 1
+            Bx      Binfo
+           a  b    Bc   rnew
+```
+
+**Parent color is black:**
+
+In that case all four cases for the sibling are possible. In order to end up in
+state 1 we have to build a new parent with black height `h + 2`. In order to
+reach state 2, it is sufficient to build a new parent node with black height `h
++ 1`.
+
+
+```
+                Bx                          <-- h + 1; state 2
+            a       Rinfo
+                  Bb    rnew
+
+
+                By                          <-- h + 2; state 1
+            Bx      Binfo
+          a    b   Bc   rnew
+
+
+                Bx                          <-- h + 2; state 1
+            a+      By
+                  b     Binfo
+                       Bc   rnew
+
+                    Bx                      <-- h + 2; state 1
+            a+              Rz
+                        By      Binfo
+                      b   c    Bd   rnew
+```
