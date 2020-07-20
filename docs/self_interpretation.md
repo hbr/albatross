@@ -264,7 +264,15 @@ we call such a compiler `C_ABA`. `C_ABA` is a compiler from source language `A`
 to target language `B` written in the source language `A`, i.e. `C_ABA` is an
 element of `PA`.
 
-Let language `A = (PA, evalA)` be defined by the compiler `C_ABC`.
+Let the language `A = (PA, evalA)` be given. According to our definition `C_ABA`
+defines a valid compiler if
+
+    evalA(S_A, n) ~ evalB(second(evalA(C_ABA, S_A)), n)
+
+for all natural numbers `n` and valid programs `S_A`. Furthermore, `evalA(C_ABA,
+    S_A)` should evaluate to `<0,0>` if `S_A` is not an element of `PA`.
+
+Let the language `A = (PA, evalA)` be defined by the compiler `C_ABC`.
 If `C_ABA` really implements a compiler of `A`, then the following equivalence
 must be valid
 
@@ -282,7 +290,7 @@ the target codes **behaves** the same, i.e. for every input `m` they return the
 same output:
 
 ```
-    evalB(evalA(C_ABA, S_A), m) ~ evalB(evalC(C_ABC, S_A), m)
+    evalB(second(evalA(C_ABA, S_A)), m) ~ evalB(second(evalC(C_ABC, S_A)), m)
 ```
 
 
@@ -297,3 +305,96 @@ cannot be written in its own language.
 
 More general: Assuming that `C_AA` exists and `LA` is total. Does this lead to a
 contradiction?
+
+Example of a Total Language with a Self-Compiler
+-----------------------------------------------
+
+Suppose we hava a language
+
+    A = (PA, evalA)
+
+with the following properties:
+
+* `A` is a total language, i.e. `evalA` is total.
+* `A` implements the function c
+
+```
+                  / <1,x>,    if x in PA
+      c :=  x -> |
+                  \ <0,0>,    otherwise
+```
+This means, `A` is a total language being able to implement its own
+parser/typechecker.
+
+Let's call the program implementing the function `c` `C_AAA`. `C_AAA` defines a
+valid compiler from language `A` to language `A` written in language `A`, since
+
+```
+evalA(second(evalA(C_AAA, S_A)), n)
+    = evalA(second(<1,S_A>), n)
+    = evalA(S_A, n)
+
+```
+for all natural numbers `n` and valid programs `S_A` and
+
+    evalA(C_AAA, S_A) = <0,0>
+
+if `S_A` is not a valid program.
+
+This shows that `A` is a total language with a (admittedly very "esoteric")
+self-compiler.
+
+But we can go one step further.
+
+
+Suppose we have language `A` defined as above and language `B = (PB, evalB)`
+with the following additional properties:
+
+* `PA` is a subset of `PB`
+* `evalA(p,n) = evalB(p,n)` for all natural numbers `n` and valid programs `p`
+  of `A` (i.e. `p` is element of `PA`).
+
+This means, language `B` is an extension of language `A` (and does not need to
+be total - we don't pose any restrictions on the extension as long as `evalB`
+behaves the same as `evalA` for all programs from language `A`).
+
+Since language `A` is a subset of language `B`, writing a compiler from `B` to
+`A` boils down to writing a decision procedure for `PA` (i.e. a
+parser/typechecker). The actual compiler consists of the identity function.
+
+With these requirements, the program `C_ABA := C_AAA` defines a valid compiler
+from language `A` to language `B` written in language `A`, since
+
+* For all natural numbers `n` and valid source programs `S_A`, the following
+holds:
+
+```
+    evalB(second(evalA(S_ABA, S_A)), n)
+        = evalB(S_A, n)
+        = evalA(S_A, n)
+```
+
+* `evalA(S_ABA, S_A) = <0,0>` if `S_A` is not an element of `PA`.
+
+These examples show that any total language, which is able to implement its own
+decision procedure (i.e. distinguish valid programs from invalid ones) is able
+to express some form of self-compiler. The examples don't touch the source code
+(and hence don't implement any source code tranformations), since the actual
+compilation consists of the identity function. But according to our definition,
+they are valid self-compilers.
+
+It remains to be explored if there are any restrictions to implementing a
+self-compiler compiling into a target language different from the source
+language (i.e. implementing "real" code transformations)These examples show that
+any total language, which is able to implement its own decision procedure (i.e.
+distinguish valid programs from invalid ones) is able to express some form of
+self-compiler. The examples don't touch the source code (and hence don't
+implement any source code tranformations), since the actual compilation consists
+of the identity function. But according to our definition, they are valid
+self-compilers.
+
+It remains to be explored if there are any restrictions to implementing a
+self-compiler compiling into a target language different from the source
+language (i.e. implementing "real" code transformations). But at least there
+doesn't seem to be an inherent problem of expressing self-compilers in a total
+language.
