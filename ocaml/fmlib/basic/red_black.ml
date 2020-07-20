@@ -609,8 +609,8 @@ struct
             ROk (Node (Black, Empty, p, Empty), x)
 
         | Black, _ ->
-            (* Cannot happen. If a black node has one child, the child must be
-             * red. *)
+            (* Cannot happen. If a black node has one child, then the child must
+             * be red. *)
             assert false
 
         | Red, Empty ->
@@ -623,21 +623,16 @@ struct
 
 
 
-    let rec remove_leftmost (tree: 'a t): 'a removed option =
-        match tree with
-        | Empty ->
-            None
 
-        | Node (color, Empty, x, right) ->
-            Some (remove_bottom color x right)
+    let rec remove (key: Key.t) (tree: 'a t): 'a t =
+        match rem key tree with
+        | None ->
+            tree
+        | Some (ROk (tree, _))
+        | Some (RMinus (tree, _)) ->
+            tree
 
-        | Node (color, left, x, right) ->
-            Option.map
-                (fun left -> removed_left color left x right)
-                (remove_leftmost left)
-
-
-    let rec remove_aux (k: Key.t) (tree: 'a t): 'a removed option =
+    and rem (k: Key.t) (tree: 'a t): 'a removed option =
         match tree with
         | Empty ->
             None
@@ -648,7 +643,7 @@ struct
             if cmp < 0 then
                 Option.map
                     (fun left -> removed_left color left x right)
-                    (remove_aux k left)
+                    (rem k left)
 
             else if cmp = 0 then
                 match remove_leftmost right with
@@ -661,16 +656,20 @@ struct
             else
                 Option.map
                     (fun right -> removed_right color left x right)
-                    (remove_aux k right)
+                    (rem k right)
 
+    and remove_leftmost (tree: 'a t): 'a removed option =
+        match tree with
+        | Empty ->
+            None
 
-    let remove (key: Key.t) (tree: 'a t): 'a t =
-        match remove_aux key tree with
-        | None ->
-            tree
-        | Some (ROk (tree, _))
-        | Some (RMinus (tree, _)) ->
-            tree
+        | Node (color, Empty, x, right) ->
+            Some (remove_bottom color x right)
+
+        | Node (color, left, x, right) ->
+            Option.map
+                (fun left -> removed_left color left x right)
+                (remove_leftmost left)
 end (* Map *)
 
 
