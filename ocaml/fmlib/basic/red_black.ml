@@ -161,36 +161,27 @@ struct
 
     type 'a almost =
       | AOk of (* Root color unchanged, no violation. *)
-            color * 'a t * 'a pair * 'a t
+            'a t
 
       | BROk of (* Root color changed from black to red, no violation *)
             'a t * 'a pair * 'a t
 
       | RVio of
-            (* Root color remains red, red violation present because on of the
+            (* Root color remains red, red violation present because one of the
              * children has been red already. All nodes have the original black
              * height. *)
             'a t * 'a pair * 'a t * 'a pair * 'a t
 
-    let almost_ok color a x b =
-        AOk (color, a, x, b)
-
-    let almost_black_to_red a x b =
-        BROk (a, x, b)
-
-    let almost_violated a x b y c =
-        RVio (a, x, b, y, c)
-
 
 
     let use_almost
-            (ok1: color -> 'a t -> 'a pair -> 'a t -> 'b)
+            (ok1: 'a t -> 'b)
             (ok2: 'a t -> 'a pair -> 'a t -> 'b)
             (vio: 'a t -> 'a pair -> 'a t -> 'a pair -> 'a t -> 'b)
             : 'a almost -> 'b =
         function
-        | AOk (color, left, x, right) ->
-            ok1 color left x right
+        | AOk tree ->
+            ok1 tree
         | BROk (left, x, right) ->
             ok2 left x right
         | RVio (a, x, b, y, c) ->
@@ -199,7 +190,7 @@ struct
 
     let rbt_of_almost (almost: 'a almost): 'a t =
         use_almost
-            node
+            (fun x -> x)
             (node Red)
             (fun a x b y c ->
                  node Black (node Red a x b) y c)
@@ -208,49 +199,41 @@ struct
 
     let balance_left color left z d =
         use_almost
-            (fun c0 a x b ->
-                 (* c0 unchanged, no violation *)
-                 almost_ok color (node c0 a x b) z d)
+            (fun left ->
+                 AOk (node color left z d))
             (fun left p right ->
                  (* Root color of (left,p,right) changed from black to red, no
                   * violation. *)
                  match color with
                  | Black ->
-                     almost_ok color (node Red left p right) z d
+                     AOk (node Black (node Red left p right) z d)
 
                  | Red ->
                      (* red violation *)
-                     almost_violated left p right z d)
+                     RVio (left, p, right, z, d))
             (fun a x b y c ->
                  assert (color = Black);
-                 almost_black_to_red
-                     (node Black a x b)
-                     y
-                     (node Black c z d))
+                 BROk (node Black a x b, y, (node Black c z d)))
             left
 
 
     let balance_right color a x right =
         use_almost
-            (fun c0 b y c ->
-                 (* c0 unchanged, no violation *)
-                 almost_ok color a x (node c0 b y c))
+            (fun right ->
+                 AOk (node color a x right))
             (fun left p right ->
                  (* Root color of (left,p,right) changed from black to red, no
                   * violation. *)
                  match color with
                  | Black ->
-                     almost_ok color a x (node Red left p right)
+                     AOk (node color a x (node Red left p right))
 
                  | Red ->
                      (* red violation *)
-                     almost_violated a x left p right)
+                     RVio (a, x, left, p, right))
             (fun b y c z d ->
                  assert (color = Black);
-                 almost_black_to_red
-                     (node Black a x b)
-                     y
-                     (node Black c z d))
+                 BROk (node Black a x b, y, (node Black c z d)))
             right
 
 
@@ -272,7 +255,7 @@ struct
                 balance_left color (ins k v left) x right
 
             else if cmp = 0 then
-                AOk (color, left, (k,v), right)
+                AOk (node color left (k,v) right)
 
             else
                 balance_right color left x (ins k v right)
