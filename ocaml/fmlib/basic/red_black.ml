@@ -167,9 +167,9 @@ struct
             'a t * 'a pair * 'a t
 
       | RVio of
-            (* Root color remains red, red violation present because one of the
-             * children has been red already. All nodes have the original black
-             * height. *)
+            (* Root color has been red originally. [a x b y c] is an orderd
+             * sequence. All three subtrees [a], [b] and [c] are black rooted
+             * and have the original black height. *)
             'a t * 'a pair * 'a t * 'a pair * 'a t
 
 
