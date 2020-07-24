@@ -30,7 +30,7 @@ sig
     val is_valid_index: int -> t -> bool
     val name_of_index: int -> t -> string
     val push_local: string -> Term.typ -> t -> t
-    val type_of_literal:    Term.Value.t -> t -> Term.typ
+    val type_of_literal:    Value.t -> t -> Term.typ
     val type_of_variable: int -> t -> Term.typ
     val definition_term: int -> t -> Term.t option
 end
@@ -234,7 +234,7 @@ struct
     let split_kind
         (k: Term.typ)
         (c: t)
-        : ((Term.Pi_info.t * Term.typ) list * Term.Sort.t) option
+        : ((Term.Pi_info.t * Term.typ) list * Sort.t) option
     =
         let args, res = split_type k c in
         let open Term in
@@ -246,7 +246,7 @@ struct
 
 
 
-    let sort_of_kind (k: Term.typ) (c:t): Term.Sort.t option =
+    let sort_of_kind (k: Term.typ) (c:t): Sort.t option =
         Option.map
             snd
             (split_kind k c)
@@ -274,14 +274,14 @@ struct
                 false, false
         in
         match sort_of_kind typ c with
-        | Some (Term.Sort.Any _) ->
+        | Some (Sort.Any _) ->
             (* Must be upper case *)
             if is_lower then
                 Error  Lower_for_type
             else
                 Ok ()
 
-        | Some Term.Sort.Proposition ->
+        | Some Sort.Proposition ->
             (* Must be lower case *)
             if is_upper then
                 Error Upper_for_proposition

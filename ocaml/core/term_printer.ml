@@ -47,7 +47,7 @@ module Pretty (Gamma: GAMMA) (P: Pretty_printer.SIG) =
          [], t, c
 
 
-    let print_sort: Term.Sort.t -> pr_result = function
+    let print_sort: Sort.t -> pr_result = function
       | Proposition ->
          None, P.string "Proposition"
 
@@ -62,20 +62,20 @@ module Pretty (Gamma: GAMMA) (P: Pretty_printer.SIG) =
          P.string str
 
 
-    let print_value: Term.Value.t -> pr_result = function
-      | Term.Value.Int i ->
+    let print_value: Value.t -> pr_result = function
+      | Value.Int i ->
          None,
          P.string (string_of_int i)
 
-      | Term.Value.Char i ->
+      | Value.Char i ->
          None,
          P.(char '\'' <+> char (Char.chr i) <+> char '\'')
 
-      | Term.Value.String str ->
+      | Value.String str ->
          None,
          P.(char '"' <+> string str <+> char '"')
 
-      | Term.Value.Unary _ | Term.Value.Binary _ ->
+      | Value.Unary _ | Value.Binary _ ->
          None,
          P.(string "<function>")
 

@@ -7,14 +7,14 @@ module Pi_info = Term.Pi_info
 module Lambda_info = Term.Lambda_info
 
 
-let builtin_functions: Term.Value.t String_map.t =
+let builtin_functions: Value.t String_map.t =
     let open String_map in
     empty
-    |> add "int_plus"      Term.Value.int_plus
-    |> add "int_minus"     Term.Value.int_minus
-    |> add "int_times"     Term.Value.int_times
-    |> add "int_negate"    Term.Value.int_negate
-    |> add "string_concat" Term.Value.string_concat
+    |> add "int_plus"      Value.int_plus
+    |> add "int_minus"     Value.int_minus
+    |> add "int_times"     Value.int_times
+    |> add "int_negate"    Value.int_negate
+    |> add "string_concat" Value.string_concat
 
 let _ =
     String_map.mem "int_plus" builtin_functions
@@ -24,7 +24,7 @@ type definition =
   | Axiom
   | Assumption
   | Builtin_type of string
-  | Builtin of string * Term.Value.t
+  | Builtin of string * Value.t
   | Definition of Term.t
   | Inductive_type of int * int
   | Constructor of int * int * int
@@ -260,7 +260,7 @@ let string_type (c:t) =
     )
 
 
-let type_of_literal (v: Term.Value.t) (c: t): Term.typ =
+let type_of_literal (v: Value.t) (c: t): Term.typ =
   let open Term in
   match v with
   | Value.Int _ ->

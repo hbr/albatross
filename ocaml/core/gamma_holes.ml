@@ -293,7 +293,7 @@ let type_of_variable (idx: int) (gh: t): Term.typ =
 
 
 
-let type_of_literal (value: Term.Value.t) (gh: t): Term.typ =
+let type_of_literal (value: Value.t) (gh: t): Term.typ =
     Gamma.type_of_literal value gh.base
 
 

@@ -261,7 +261,7 @@ struct
         Gamma.definition_term idx uc.gamma_top
 
 
-    let type_of_literal (lit: Term.Value.t) (uc: t): Term.typ =
+    let type_of_literal (lit: Value.t) (uc: t): Term.typ =
         Gamma.type_of_literal lit uc.gamma_top
 
 
@@ -398,14 +398,14 @@ struct
 
 
     let unify_sorts
-        (act_sort: Term.Sort.t)
-        (req_sort: Term.Sort.t)
+        (act_sort: Sort.t)
+        (req_sort: Sort.t)
         (is_super: bool)
         (path: path) (uc: Uc.t):
         Uc.t result2
     =
         if
-            (is_super && Term.Sort.is_super req_sort act_sort)
+            (is_super && Sort.is_super req_sort act_sort)
             ||
             (not is_super && req_sort = act_sort)
         then

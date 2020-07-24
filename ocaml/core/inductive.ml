@@ -24,7 +24,7 @@ struct
         name: string;
         kind:  Term.typ; (* only indices, valid in a context with parameters *)
         indices: (Term.Pi_info.t * Term.typ) array; (* kind arguments *)
-        sort:  Term.Sort.t;
+        sort:  Sort.t;
     }
     (* [indices] and [sort] represent the normalized version of [kind]*)
 

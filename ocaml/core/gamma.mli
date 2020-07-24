@@ -2,7 +2,7 @@ type definition =
   | Axiom
   | Assumption
   | Builtin_type of string
-  | Builtin of string * Term.Value.t
+  | Builtin of string * Value.t
   | Definition of Term.t
   | Inductive_type of int * int
   | Constructor of int * int * int
@@ -52,7 +52,7 @@ val type_at_level: int -> t -> Term.typ
 val int_type: t -> Term.typ
 
 
-val type_of_literal: Term.Value.t -> t -> Term.typ
+val type_of_literal: Value.t -> t -> Term.typ
 val type_of_variable: int -> t -> Term.typ
 
 

@@ -1,8 +1,8 @@
 open Fmlib
 
 module Int_map   = Common.Int_map
-module Sort_map  = Finite_map.Make (Term.Sort)
-module Value_map = Finite_map.Make (Term.Value)
+module Sort_map  = Finite_map.Make (Sort)
+module Value_map = Finite_map.Make (Value)
 
 
 (*

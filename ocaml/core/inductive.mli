@@ -8,7 +8,7 @@ sig
         string
         -> Term.typ
         -> (Term.Pi_info.t * Term.typ) list
-        -> Term.Sort.t
+        -> Sort.t
         -> t
     (** [make name kind indices sort] *)
 

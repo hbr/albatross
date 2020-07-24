@@ -46,10 +46,10 @@ let is_subtype (sub: Term.typ) (typ: Term.typ) (gh: t) : bool
 
 let check_variable_name
     (name: string)
-    (sort_of_type: Term.Sort.t)
+    (sort_of_type: Sort.t)
     : bool
     =
-    let open Term.Sort in
+    let open Sort in
     let open Common in
     let letter, lower, upper =
         if String.length name > 0 then

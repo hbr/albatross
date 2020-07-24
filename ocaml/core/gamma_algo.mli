@@ -29,7 +29,7 @@ sig
 
     *)
 
-    val type_of_literal: Term.Value.t -> t -> Term.typ
+    val type_of_literal: Value.t -> t -> Term.typ
 
 
     val type_of_variable: int -> t -> Term.typ
@@ -73,7 +73,7 @@ sig
     val split_kind:
         Term.typ
         -> Gamma.t
-        -> ((Term.Pi_info.t * Term.typ) list * Term.Sort.t) option
+        -> ((Term.Pi_info.t * Term.typ) list * Sort.t) option
     (**
         [split_kind k gamma]:
 
@@ -94,7 +94,7 @@ sig
 
 
 
-    val sort_of_kind: Term.typ -> Gamma.t -> Term.Sort.t option
+    val sort_of_kind: Term.typ -> Gamma.t -> Sort.t option
     (**
         [sort_of_kind typ gamma]
 
