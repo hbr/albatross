@@ -261,7 +261,6 @@ let string_type (c:t) =
 
 
 let type_of_literal (v: Value.t) (c: t): Term.typ =
-  let open Term in
   match v with
   | Value.Int _ ->
       int_type c
