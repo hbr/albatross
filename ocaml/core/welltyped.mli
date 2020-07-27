@@ -50,7 +50,7 @@ sig
     val make_term: context -> term t -> judgement res
 
 
-    (** Combinators: Primitive and compund combinators to build terms. *)
+    (** Combinators: Primitive and compound combinators to build terms. *)
     module Construct:
     sig
         val sort:
@@ -59,13 +59,28 @@ sig
         val variable:
             Info.t -> int -> term t
 
+        val identifier: Info.t -> string -> term t
+        (** [identifier info name] Build the term represented by [name]. *)
+
+
+        val unknown: Info.t -> term t
+        (** Unknown term. The compiler is asked to derive. *)
+
+
         val application:
             Info.t -> term tl -> term tl -> term t
+
 
         (** [lambda name typ exp] Build the lambda term [\ (name: typ) := exp].
          *)
         val lambda:
-            Info.t -> string -> term tl option -> term tl -> term t
+            Info.t -> string -> term tl -> term tl -> term t
+
+
+        (** [pi name typ res] Build the product [all (name: typ): res].
+         *)
+        val pi:
+            Info.t -> string -> term tl -> term tl -> term t
     end
 end
 

@@ -23,41 +23,63 @@ let extract_judgement (judge: judgement): Context.t * Term.t * Term.typ =
 
 module Builder (Info: ANY) =
 struct
-    type term
+    module Build = Build.Make (Info)
+
+    type term = Build.term_ref
 
     type problem = Info.t * Type_error.t
 
     type 'a res = ('a, problem) result
 
-    type bc (* nyi: build context *)
-
-    type 'a t = context -> ('a * bc) res
+    type 'a t = Build.t -> ('a * Build.t) res
 
     type 'a tl = unit -> term t
 
-    let make_term (c: context) (term: term t): judgement res =
-        Result.(term c >>= fun (_,_) -> assert false)
+    let make_term (c: context) (term_builder: term t): judgement res =
+        Result.(term_builder (Build.make c)
+                >>= fun (term_ref, bc) ->
+                let t, typ = Build.get_term term_ref bc in
+                Ok (c, t, typ))
+
+
+
+
 
     module Construct =
     struct
-        let sort (_: Info.t) (_: Sort.t): term t =
-            assert false
+        let sort (info: Info.t) (s: Sort.t): term t =
+            Build.Construct.sort info s
 
 
         let variable (_: Info.t) (_: int): term t =
             assert false
 
 
+        let identifier (info: Info.t) (name: string): term t =
+            Build.Construct.identifier info name
+
+        let unknown (_: Info.t): term t =
+            assert false
+
         let application (_: Info.t) (_: term tl) (_: term tl): term t =
             assert false
 
         let lambda
-                (_: Info.t) (_: string) (_: term tl option) (_: term tl)
+                (_: Info.t) (_: string) (_: term tl) (_: term tl)
+            : term t
+            =
+            assert false
+
+        let pi
+                (_: Info.t) (_: string) (_: term tl) (_: term tl)
             : term t
             =
             assert false
     end
 end
+
+
+
 
 
 module Check =
@@ -83,7 +105,7 @@ struct
                 lambda
                     ()
                     (Term.Lambda_info.name info)
-                    (Some (check argtp))
+                    (check argtp)
                     (check exp)
 
             | _ ->
