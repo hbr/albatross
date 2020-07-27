@@ -97,6 +97,9 @@ module type COMBINATORS =
 
     val (|=): ('a -> 'b) t -> 'a t -> 'b t
     val (|.): 'a t -> _ t -> 'a t
+
+    val (|==): ('a -> 'b) t -> (unit -> 'a t) -> 'b t
+    val (|..): 'a t -> (unit -> _ t) -> 'a t
   end
 
 
@@ -487,6 +490,15 @@ module Make
     let (|.) (p: 'a t) (q: _ t): 'a t =
       p >>= fun a ->
       q >>= fun _ -> return a
+
+
+    let (|==) (p: ('a -> 'b) t) (q: unit -> 'a t): 'b t =
+      p >>= fun f -> map f (q ())
+
+
+    let (|..) (p: 'a t) (q: unit -> _ t): 'a t =
+      p >>= fun a ->
+      q () >>= fun _ -> return a
 
 
     let optional (p: 'a t): 'a option t =

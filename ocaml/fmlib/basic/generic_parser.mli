@@ -39,6 +39,9 @@ module type COMBINATORS =
 
     val (|=): ('a -> 'b) t -> 'a t -> 'b t
     val (|.): 'a t -> _ t -> 'a t
+
+    val (|==): ('a -> 'b) t -> (unit -> 'a t) -> 'b t
+    val (|..): 'a t -> (unit -> _ t) -> 'a t
   end
 
 
