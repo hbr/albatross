@@ -71,6 +71,9 @@ struct
 
     let range (l:'a t): range =
       l.start, l.end_
+
+    let split (l: 'a t): 'a * range =
+        l.value, (l.start, l.end_)
 end
 
 

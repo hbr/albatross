@@ -23,8 +23,9 @@ sig
   val use: 'a t -> (Position.t -> 'a -> Position.t -> 'b) -> 'b
   val start: 'a t -> Position.t
   val end_:  'a t -> Position.t
-  val range: 'a t -> Position.t * Position.t
+  val range: 'a t -> range
   val value: 'a t -> 'a
+  val split: 'a t -> 'a * range
 end
 
 
