@@ -16,6 +16,7 @@ end
 
 module Located:
 sig
+  type range = Position.t * Position.t
   type 'a t
   val make: Position.t -> 'a -> Position.t -> 'a t
   val map: ('a -> 'b) -> 'a t -> 'b t

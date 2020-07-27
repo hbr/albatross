@@ -48,6 +48,8 @@ end
 
 module Located =
 struct
+    type range = Position.t * Position.t
+
     type 'a t =
       {start:Position.t; value:'a; end_:Position.t}
 
@@ -67,7 +69,7 @@ struct
 
     let end_ (l:'a t) = l.end_
 
-    let range (l:'a t): Position.t * Position.t =
+    let range (l:'a t): range =
       l.start, l.end_
 end
 
