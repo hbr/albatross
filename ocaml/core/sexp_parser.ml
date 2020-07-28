@@ -23,6 +23,8 @@ struct
             type t = Located.range * Type_error.t
         end
 
+    type 'a located = Located.range * 'a
+
     include Character_parser.Normal (State) (Final) (Semantic) (Unit)
 
     type term_tag =
@@ -52,6 +54,15 @@ struct
             |> add "class"   Class
       )
 
+    let located (p: 'a t): 'a located t =
+        map
+            (fun res ->
+                 let v = Located.value res
+                 and range = Located.range res
+                 in
+                 range, v)
+            (located p)
+
 
     let whitespace_char: char t =
         expect
@@ -70,11 +81,11 @@ struct
             "identifier"
 
 
-    let name: string Located.t t =
+    let name: string located t =
         located raw_name
 
 
-    let name_ws: string Located.t t =
+    let name_ws: string located t =
         name |. whitespace
 
 
@@ -95,7 +106,7 @@ struct
         String.has (fun d -> c = d) 0 operator_characters
 
 
-    let operator: string Located.t t =
+    let operator: string located t =
         located (word
                      is_operator_character
                      is_operator_character
@@ -103,7 +114,7 @@ struct
         |. whitespace
 
 
-    let number: string Located.t t =
+    let number: string located t =
         located (word Char.is_digit Char.is_digit "digit")
         |. whitespace
 
@@ -113,21 +124,26 @@ struct
 
     let atom: Builder.t t =
         map
-            (fun name ->
-                let name, range = Located.split name in
-                Builder.Construct.identifier range name)
+            (fun (range,name) -> Builder.Construct.identifier range name)
             name_ws
 
 
+
+    let some_tag (expecting: string) (map: 'a String_map.t): 'a t =
+        (backtrackable
+            (raw_name >>= fun tag ->
+             match String_map.maybe_find tag map with
+             | None ->
+                 unexpected expecting
+             | Some tag ->
+                 return tag)
+            expecting)
+        |. whitespace
+
+
+
     let term_tag: term_tag t =
-        backtrackable raw_name "<term tag>"
-        >>= fun tag ->
-        match String_map.maybe_find tag term_tags with
-        | None ->
-            unexpected "<term tag>"
-        | Some tag ->
-            whitespace >>= fun _ ->
-            return tag
+        some_tag "<term tag>" term_tags
 
 
 
@@ -185,23 +201,28 @@ let build_expression
         (Option.value (result p))
 
 
+let is_term_ok (src: string): bool =
+    match
+        build_expression src Welltyped.empty
+    with
+    | Ok _ ->
+        true
+    | Error _ ->
+        false
 
 
 (* Some simple expressions *)
 let%test _ =
-    match build_expression "Any" Welltyped.empty with
-    | Ok _ ->
-        true
-    | Error _ ->
-        false
+    is_term_ok "Any"
 
 
 let%test _ =
-    match build_expression "Proposition" Welltyped.empty with
-    | Ok _ ->
-        true
-    | Error _ ->
-        false
+    is_term_ok "Proposition"
+
+(*
+let%test _ =
+    is_term_ok "(pi ((A Any) (a A)) A"
+*)
 
 
 (* Adding builtin types and functions *)
