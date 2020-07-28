@@ -25,7 +25,13 @@ module Builder (Info: ANY) =
 struct
     module Build = Build.Make (Info)
 
+    type name = string * Info.t
+
     type term = Build.term_ref
+
+    type definition
+
+    type declaration
 
     type problem = Info.t * Type_error.t
 
@@ -36,10 +42,29 @@ struct
     type 'a tl = unit -> term t
 
     let make_term (c: context) (term_builder: term t): judgement res =
-        Result.(term_builder (Build.make c)
-                >>= fun (term_ref, bc) ->
-                let t, typ = Build.get_term term_ref bc in
-                Ok (c, t, typ))
+        Result.(
+            term_builder
+                (Build.make c)
+            >>= fun (term_ref, bc) ->
+            let t, typ = Build.get_term term_ref bc in
+            Ok (c, t, typ))
+
+
+    let add_definition
+            (_: context)
+            (_: definition t)
+        : context res
+        =
+        assert false
+
+
+
+    let add_builtin
+            (_: context)
+            (_: declaration t)
+        : context res
+        =
+        assert false
 
 
 
@@ -61,8 +86,31 @@ struct
         let unknown (_: Info.t): term t =
             assert false
 
-        let application (_: Info.t) (_: term tl) (_: term tl): term t =
-            assert false
+        let application (info: Info.t) (f: term tl) (arg: term tl): term t =
+            (* Build a function application.
+
+               1. Instruct [Build] to expect a term with one more argument than
+               the current term representing the whole application. The
+               function term becomes the new current term.
+
+               2. Build the function term. It ends by having the function term
+               fully constructed as the current term.
+
+               3. Instruct [Build] to expect a term which is an argument of the
+               current term. The argument term becomes the new current term.
+
+               3. Pop the argument term and the function term and complete the
+               application as the initially current term.
+             *)
+            let open Result in
+            fun bc ->
+            Build.start_application bc
+            |> f ()
+            >>= fun (_, bc) ->
+            Build.start_argument bc
+            |> arg ()
+            >>= fun (_, bc) ->
+            Build.end_application info bc
 
         let lambda
                 (_: Info.t) (_: string) (_: term tl) (_: term tl)

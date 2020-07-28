@@ -100,6 +100,16 @@ struct
             }
         )
 
+    let start_application (_: t): t =
+        assert false
+
+    let start_argument (_: t): t =
+        assert false
+
+    let end_application (_: Info.t) (_: t): (term_ref * t) res =
+        assert false
+
+
 
     module Construct =
     struct

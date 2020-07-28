@@ -33,11 +33,28 @@ val extract_judgement: judgement -> Context.t * Term.t * Term.typ
 (** A builder for welltyped terms in wellformed contexts. *)
 module Builder (Info: ANY):
 sig
-    type term
+    type name = string * Info.t
+
+    type term               (** An opaque type representing terms. *)
+
+    type definition         (** An opaque type representing definitions. *)
+
+    type declaration        (** An opaque type representing declarations i.e.
+                                definitions without body. *)
+
 
     type problem = Info.t * Type_error.t
 
-    (** ['a t] Combinator type building an ['a]. *)
+
+    (** ['a t] Combinator type building an ['a].
+
+        [term t] is the type of a combinator, building a term
+
+        [defintion t] is the type of a combinator building a definition
+
+        [context t] is the type of a combinator building and adding a global
+        declaration to the context
+     *)
     type _ t
 
     (** ['a tl] Lazy version of ['a t]. *)
@@ -50,7 +67,17 @@ sig
     val make_term: context -> term t -> judgement res
 
 
-    (** Combinators: Primitive and compound combinators to build terms. *)
+    (** [add_definition context definition] adds [definition] to [context]. *)
+    val add_definition: context -> definition t -> context res
+
+
+    (** [add_builtin context declaration] adds [declaration] as a builtin to
+        [context]. *)
+    val add_builtin: context -> declaration t -> context res
+
+
+    (** Combinators: Primitive and compound combinators to build terms or build
+        and add globals to the context. *)
     module Construct:
     sig
         val sort:

@@ -11,9 +11,46 @@ struct type t = Located.range end
 module Builder = Welltyped.Builder (Info)
 
 
-module Make (State: ANY) (Final: ANY) =
+module Make (Final: ANY) =
 struct
-    include Character_parser.Normal (State) (Final) (Unit) (Unit)
+    module State =
+        struct
+            type t = Welltyped.context
+        end
+
+    module Semantic =
+        struct
+            type t = Located.range * Type_error.t
+        end
+
+    include Character_parser.Normal (State) (Final) (Semantic) (Unit)
+
+    type term_tag =
+      | Application
+      | Lambda
+      | Pi
+
+
+    let term_tags: term_tag String_map.t =
+        String_map.(empty
+                    |> add "app" Application
+                    |> add "pi" Pi
+                    |> add "lambda" Lambda)
+
+
+    type declaration_tag =
+      | Builtin
+      | Definition
+      | Class
+
+
+    let declaration_tags: declaration_tag String_map.t =
+        String_map.(
+            empty
+            |> add "builtin" Builtin
+            |> add "def"     Definition
+            |> add "class"   Class
+      )
 
 
     let whitespace_char: char t =
@@ -39,6 +76,16 @@ struct
 
     let name_ws: string Located.t t =
         name |. whitespace
+
+
+    let left_paren_ws: unit t =
+        char '('
+        |. whitespace
+
+
+    let right_paren_ws: unit t =
+        char ')'
+        |. whitespace
 
 
     let operator_characters: string = "+-^*|/=~<>"
@@ -72,6 +119,16 @@ struct
             name_ws
 
 
+    let term_tag: term_tag t =
+        backtrackable raw_name "<term tag>"
+        >>= fun tag ->
+        match String_map.maybe_find tag term_tags with
+        | None ->
+            unexpected "<term tag>"
+        | Some tag ->
+            whitespace >>= fun _ ->
+            return tag
+
 
 
     let rec expression _: Builder.term Builder.t t =
@@ -79,29 +136,31 @@ struct
         <|>
         compound ()
 
+
     and compound _: Builder.term Builder.t t =
         (return (fun _ -> assert false))
-        |.  char '('
-        |. whitespace
-        |= (name_ws >>= fun name ->
-            let name = Located.value name
-            in
-            if name = "app" then
+        |. left_paren_ws
+        |= (term_tag >>=
+            function
+            | Application ->
                 application ()
-            else if name = "pi" then
+            | Pi ->
                 assert false
-            else if name = "lam" then
-                assert false
-            else
-                unexpected "wrong tag of expression"
-        )
-        |. char ')'
-        |. whitespace
+            | Lambda ->
+                assert false)
+        |. right_paren_ws
 
     and application _: Builder.term Builder.t t =
         (return (fun _ _ -> assert false))
         |= expression ()
         |= one_or_more (expression ())
+
+
+    let declaration (_: string): Builder.declaration Builder.t t =
+        assert false
+
+    let builtin _: Builder.declaration Builder.t t =
+        declaration "builtin"
 end
 
 
@@ -117,22 +176,54 @@ struct
     type t = Builder.term Builder.t
 end
 
-module Expression_parser = Make (Unit) (Expression)
+module Declaration =
+struct
+    type t = Builder.declaration Builder.t
+end
+
+module Expression_parser  = Make (Expression)
+module Declaration_parser = Make (Declaration)
+
 
 let build_expression
-    (str: string)
+    (src: string)
+    (c: Welltyped.context)
     : (Welltyped.judgement, Builder.problem) result =
     let open Expression_parser in
-    let p = run (expression ()) () str in
+    let p = run (expression ()) c src in
     assert (has_ended p);
     assert (has_succeeded p);
     Builder.make_term
-        (Welltyped.empty)
+        c
         (Option.value (result p))
 
 
+let add_definition
+    (_: string)
+    (_: Welltyped.context)
+    : (Welltyped.context, Builder.problem) result
+    =
+    assert false
+
+
+let add_builtin
+    (src: string)
+    (c: Welltyped.context)
+    : (Welltyped.context, Builder.problem) result
+    =
+    let open Declaration_parser in
+    let p = run (builtin ()) Welltyped.empty src in
+    assert (has_ended p);
+    assert (has_succeeded p);
+    Builder.add_builtin
+        c
+        (Option.value (result p))
+
+
+
+(* Some simple expressions *)
 let%test _ =
-    match build_expression "Any" with
+    match build_expression "Any" Welltyped.empty with
     | Ok _ ->
         true
     | Error _ ->
@@ -140,8 +231,21 @@ let%test _ =
 
 
 let%test _ =
-    match build_expression "Proposition" with
+    match build_expression "Proposition" Welltyped.empty with
     | Ok _ ->
         true
     | Error _ ->
         false
+
+
+(* Adding builtin types and functions *)
+(*
+let%test _ =
+    match
+        add_builtin "(builtin Int () Any)" Welltyped.empty
+    with
+    | Ok _ ->
+        true
+    | Error _ ->
+        false
+*)
