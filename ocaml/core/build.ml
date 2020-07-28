@@ -34,15 +34,12 @@ struct
     end
 
 
-    type term_ref =
-      | Term_ref of int
-
-
 
     type t = {
         name_map: Name_map.t;
         gh: Gamma_holes.t;
         terms: Term_ts.t Sequence.t;
+        stack: int list;
     }
 
     type problem = Info.t * Type_error.t
@@ -58,6 +55,7 @@ struct
             name_map;
             gh = Gamma_holes.make gamma;
             terms = Sequence.empty;
+            stack = [];
         }
 
 
@@ -76,22 +74,23 @@ struct
         Sequence.length bc.terms
 
 
-    let get_term (tr: term_ref) (bc: t): Term.t * Term.typ =
+    let get_term (bc: t): Term.t * Term.typ =
         (* Get the term in the original context. *)
-        match tr with
-        | Term_ref i ->
+        match bc.stack with
+        | [i] ->
             Term_ts.get
                 (count_base bc)
                 (Sequence.elem i bc.terms)
+        | _ ->
+            assert false (* Illegal. Final term not constructed. *)
 
 
     let add_term
             (info: Info.t) (term: Term.t) (typ: Term.typ) (bc: t)
-        : (term_ref * t) res
+        : t res
         =
         Ok (
             let cnt = count bc in
-            Term_ref cnt,
             { bc with
               terms =
                   Sequence.push
@@ -100,20 +99,27 @@ struct
             }
         )
 
+    let start_term (bc: t): t =
+        (* Start a term without any requirements. *)
+        {bc with
+         stack = count_terms bc :: bc.stack;
+        }
+
+
     let start_application (_: t): t =
         assert false
 
     let start_argument (_: t): t =
         assert false
 
-    let end_application (_: Info.t) (_: t): (term_ref * t) res =
+    let end_application (_: Info.t) (_: t): t res =
         assert false
 
 
 
     module Construct =
     struct
-        let sort (info: Info.t) (s: Sort.t) (bc: t): (term_ref * t) res =
+        let sort (info: Info.t) (s: Sort.t) (bc: t): t res =
             let add =
                 add_term
                     info
@@ -131,7 +137,7 @@ struct
 
         let identifier
                 (info: Info.t) (name: string) (bc: t)
-            : (term_ref * t) res
+            : t res
             =
             if name = "Proposition" then
                 sort info Sort.Proposition bc

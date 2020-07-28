@@ -111,7 +111,7 @@ struct
 
 
 
-    let atom: Builder.term Builder.t t =
+    let atom: Builder.t t =
         map
             (fun name ->
                 let name, range = Located.split name in
@@ -131,13 +131,13 @@ struct
 
 
 
-    let rec expression _: Builder.term Builder.t t =
+    let rec expression _: Builder.t t =
         atom
         <|>
         compound ()
 
 
-    and compound _: Builder.term Builder.t t =
+    and compound _: Builder.t t =
         (return (fun _ -> assert false))
         |. left_paren_ws
         |= (term_tag >>=
@@ -150,17 +150,10 @@ struct
                 assert false)
         |. right_paren_ws
 
-    and application _: Builder.term Builder.t t =
+    and application _: Builder.t t =
         (return (fun _ _ -> assert false))
         |= expression ()
         |= one_or_more (expression ())
-
-
-    let declaration (_: string): Builder.declaration Builder.t t =
-        assert false
-
-    let builtin _: Builder.declaration Builder.t t =
-        declaration "builtin"
 end
 
 
@@ -173,16 +166,10 @@ end
 
 module Expression =
 struct
-    type t = Builder.term Builder.t
-end
-
-module Declaration =
-struct
-    type t = Builder.declaration Builder.t
+    type t = Builder.t
 end
 
 module Expression_parser  = Make (Expression)
-module Declaration_parser = Make (Declaration)
 
 
 let build_expression
@@ -197,27 +184,6 @@ let build_expression
         c
         (Option.value (result p))
 
-
-let add_definition
-    (_: string)
-    (_: Welltyped.context)
-    : (Welltyped.context, Builder.problem) result
-    =
-    assert false
-
-
-let add_builtin
-    (src: string)
-    (c: Welltyped.context)
-    : (Welltyped.context, Builder.problem) result
-    =
-    let open Declaration_parser in
-    let p = run (builtin ()) Welltyped.empty src in
-    assert (has_ended p);
-    assert (has_succeeded p);
-    Builder.add_builtin
-        c
-        (Option.value (result p))
 
 
 

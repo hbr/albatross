@@ -27,66 +27,42 @@ struct
 
     type name = string * Info.t
 
-    type term = Build.term_ref
-
-    type definition
-
-    type declaration
-
     type problem = Info.t * Type_error.t
 
     type 'a res = ('a, problem) result
 
-    type 'a t = Build.t -> ('a * Build.t) res
+    type t = Build.t -> Build.t res
 
-    type 'a tl = unit -> term t
+    type tl = unit -> t
 
-    let make_term (c: context) (term_builder: term t): judgement res =
+    let make_term (c: context) (term_builder: t): judgement res =
         Result.(
-            term_builder
-                (Build.make c)
-            >>= fun (term_ref, bc) ->
-            let t, typ = Build.get_term term_ref bc in
-            Ok (c, t, typ))
-
-
-    let add_definition
-            (_: context)
-            (_: definition t)
-        : context res
-        =
-        assert false
-
-
-
-    let add_builtin
-            (_: context)
-            (_: declaration t)
-        : context res
-        =
-        assert false
-
+            map
+                (fun bc ->
+                     let t, typ = Build.get_term bc in
+                     c, t, typ)
+                (term_builder Build.(make c |> start_term)))
 
 
 
 
     module Construct =
     struct
-        let sort (info: Info.t) (s: Sort.t): term t =
+        let sort (info: Info.t) (s: Sort.t): t =
             Build.Construct.sort info s
 
 
-        let variable (_: Info.t) (_: int): term t =
+        let variable (_: Info.t) (_: int): t =
             assert false
 
 
-        let identifier (info: Info.t) (name: string): term t =
+        let identifier (info: Info.t) (name: string): t =
             Build.Construct.identifier info name
 
-        let unknown (_: Info.t): term t =
+        let unknown (_: Info.t): t =
             assert false
 
-        let application (info: Info.t) (f: term tl) (arg: term tl): term t =
+        let application (info: Info.t) (f: tl) (arg: tl): t =
             (* Build a function application.
 
                1. Instruct [Build] to expect a term with one more argument than
@@ -106,21 +82,22 @@ struct
             fun bc ->
             Build.start_application bc
             |> f ()
-            >>= fun (_, bc) ->
+            >>= fun bc ->
             Build.start_argument bc
             |> arg ()
-            >>= fun (_, bc) ->
+            >>= fun bc ->
             Build.end_application info bc
 
+
         let lambda
-                (_: Info.t) (_: string) (_: term tl) (_: term tl)
-            : term t
+                (_: Info.t) (_: string) (_: tl) (_: tl)
+            : t
             =
             assert false
 
         let pi
-                (_: Info.t) (_: string) (_: term tl) (_: term tl)
-            : term t
+                (_: Info.t) (_: string) (_: tl) (_: tl)
+            : t
             =
             assert false
     end
