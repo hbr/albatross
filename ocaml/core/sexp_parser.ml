@@ -247,7 +247,11 @@ let is_term_ok (src: string): bool =
     with
     | Ok _ ->
         true
-    | Error _ ->
+    | Error (_, error) ->
+        let module PP = Pretty_printer.Pretty (String_printer) in
+        let module Print = Type_error.Print (PP) in
+        Printf.printf "%s\n"
+            (String_printer.run (PP.run 0 70 70 (Print.print error)));
         false
 
 
@@ -260,19 +264,7 @@ let%test _ =
     is_term_ok "Proposition"
 
 
-
-let%test _ =
-    is_term_ok "(pi ((A Any) (a A)) A)"
-
-
-(* Adding builtin types and functions *)
 (*
 let%test _ =
-    match
-        add_builtin "(builtin Int () Any)" Welltyped.empty
-    with
-    | Ok _ ->
-        true
-    | Error _ ->
-        false
-*)
+    is_term_ok "(pi ((A Any) (a A) (x a)) A)"
+   *)

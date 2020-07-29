@@ -48,8 +48,23 @@ struct
 
     module Construct =
     struct
+        let binder (name: name) (typ: tl): t =
+            fun bc ->
+            let open Result in
+            let open Build in
+            map
+                (start_binder name)
+                (typ () (start_type bc))
+
+
+        let make_type (typ: tl): t =
+            fun bc ->
+            let open Build in
+            (typ () (start_type bc))
+
+
         let sort (info: Info.t) (s: Sort.t): t =
-            Build.Construct.sort info s
+            Build.make_sort info s
 
 
         let variable (_: Info.t) (_: int): t =
@@ -57,7 +72,7 @@ struct
 
 
         let identifier (info: Info.t) (name: string): t =
-            Build.Construct.identifier info name
+            Build.make_identifier info name
 
         let unknown (_: Info.t): t =
             assert false
@@ -96,10 +111,14 @@ struct
             assert false
 
         let pi
-                (_: Info.t) (_: name) (_: tl) (_: tl)
+                (info: Info.t) (name: name) (arg_typ: tl) (res_typ: tl)
             : t
             =
-            assert false
+            fun bc ->
+            let open Result in
+            binder name arg_typ bc
+            >>= (make_type res_typ)
+            >>= Build.end_pi info
     end
 end
 

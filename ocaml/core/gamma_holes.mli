@@ -35,7 +35,7 @@ val count_bounds: t -> int
 
 
 val count_entries: t -> int
-(** The number of holes and bound variable which have been entered. *)
+(** The number of holes and bound variables which have been entered. *)
 
 
 
