@@ -99,6 +99,23 @@ struct
         |. whitespace
 
 
+    let parenthesized_located (p: unit -> 'a t): 'a located t =
+        (return
+             (fun ((p1,_),_) v ((_,p2),_) ->
+                  (p1,p2), v))
+        |= located (char '(')
+        |. whitespace
+        |== p
+        |= located (char ')')
+
+
+    let parenthesized (p: unit -> 'a t): 'a t =
+        (return identity)
+        |. left_paren_ws
+        |== p
+        |. right_paren_ws
+
+
     let operator_characters: string = "+-^*|/=~<>"
 
 
@@ -122,54 +139,77 @@ struct
 
 
 
-    let atom: Builder.t t =
+    let atom: Builder.tl t =
         map
-            (fun (range,name) -> Builder.Construct.identifier range name)
+            (fun (range,name) _ -> Builder.Construct.identifier range name)
             name_ws
 
 
 
-    let some_tag (expecting: string) (map: 'a String_map.t): 'a t =
+    let some_tag (expecting: string) (map: 'a String_map.t): 'a located t =
         (backtrackable
-            (raw_name >>= fun tag ->
+            (name_ws >>= fun (range, tag) ->
              match String_map.maybe_find tag map with
              | None ->
                  unexpected expecting
              | Some tag ->
-                 return tag)
+                 return (range,tag))
             expecting)
         |. whitespace
 
 
 
-    let term_tag: term_tag t =
+    let term_tag: term_tag located t =
         some_tag "<term tag>" term_tags
 
 
 
-    let rec expression _: Builder.t t =
+    let rec expression _: Builder.tl t =
         atom
         <|>
         compound ()
 
 
-    and compound _: Builder.t t =
-        (return (fun _ -> assert false))
+    and compound _: Builder.tl t =
+        (return identity)
         |. left_paren_ws
-        |= (term_tag >>=
-            function
+        |= (term_tag >>= fun (range,tag) ->
+            match tag with
             | Application ->
-                application ()
+                application range
             | Pi ->
-                assert false
+                pi range
             | Lambda ->
                 assert false)
         |. right_paren_ws
 
-    and application _: Builder.t t =
+    and application (_: Located.range): Builder.tl t =
         (return (fun _ _ -> assert false))
         |= expression ()
         |= one_or_more (expression ())
+
+    and pi (range: Located.range): Builder.tl t =
+        (return
+             (fun fargs res ->
+                  List.fold_right
+                      (fun (name,arg_typ) res_typ _ ->
+                           Builder.Construct.pi
+                               range name arg_typ res_typ)
+                      fargs
+                      res))
+        |= parenthesized formal_arguments
+        |= result_type ()
+
+    and result_type _: Builder.tl t =
+        expression ()
+
+    and formal_arguments _: (string located * Builder.tl) list t =
+        zero_or_more (parenthesized formal_argument)
+
+    and formal_argument _: (string located * Builder.tl) t =
+        (return (fun name typ -> name, typ))
+        |= name_ws
+        |= expression ()
 end
 
 
@@ -182,7 +222,7 @@ end
 
 module Expression =
 struct
-    type t = Builder.t
+    type t = Builder.tl
 end
 
 module Expression_parser  = Make (Expression)
@@ -198,7 +238,7 @@ let build_expression
     assert (has_succeeded p);
     Builder.make_term
         c
-        (Option.value (result p))
+        (Option.value (result p) ())
 
 
 let is_term_ok (src: string): bool =
@@ -219,10 +259,10 @@ let%test _ =
 let%test _ =
     is_term_ok "Proposition"
 
-(*
+
+
 let%test _ =
-    is_term_ok "(pi ((A Any) (a A)) A"
-*)
+    is_term_ok "(pi ((A Any) (a A)) A)"
 
 
 (* Adding builtin types and functions *)

@@ -33,7 +33,7 @@ val extract_judgement: judgement -> Context.t * Term.t * Term.typ
 (** A builder for welltyped terms in wellformed contexts. *)
 module Builder (Info: ANY):
 sig
-    type name = string * Info.t
+    type name = Info.t * string
 
 
     type problem = Info.t * Type_error.t
@@ -84,13 +84,13 @@ sig
         (** [lambda name typ exp] Build the lambda term [\ (name: typ) := exp].
          *)
         val lambda:
-            Info.t -> string -> tl -> tl -> t
+            Info.t -> name -> tl -> tl -> t
 
 
         (** [pi name typ res] Build the product [all (name: typ): res].
          *)
         val pi:
-            Info.t -> string -> tl -> tl -> t
+            Info.t -> name -> tl -> tl -> t
     end
 end
 

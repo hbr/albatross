@@ -25,7 +25,7 @@ module Builder (Info: ANY) =
 struct
     module Build = Build.Make (Info)
 
-    type name = string * Info.t
+    type name = Info.t * string
 
     type problem = Info.t * Type_error.t
 
@@ -90,13 +90,13 @@ struct
 
 
         let lambda
-                (_: Info.t) (_: string) (_: tl) (_: tl)
+                (_: Info.t) (_: name) (_: tl) (_: tl)
             : t
             =
             assert false
 
         let pi
-                (_: Info.t) (_: string) (_: tl) (_: tl)
+                (_: Info.t) (_: name) (_: tl) (_: tl)
             : t
             =
             assert false
@@ -129,7 +129,7 @@ struct
             | Term.Lambda (argtp, exp, info) ->
                 lambda
                     ()
-                    (Term.Lambda_info.name info)
+                    ((), Term.Lambda_info.name info)
                     (check argtp)
                     (check exp)
 
