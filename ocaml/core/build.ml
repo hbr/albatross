@@ -10,6 +10,7 @@ open Module_types
 
 module Make (Info: ANY) =
 struct
+    module Algo = Gamma_algo.Make (Gamma_holes)
 
     type name =
         Info.t * string
@@ -27,6 +28,8 @@ struct
 
     type binder = {
         info: Info.t;
+        sort: Sort.t;
+        name_map_previous: Name_map.t;
     }
 
 
@@ -82,31 +85,63 @@ struct
              {requirement; nargs; term = None} :: bc.stack}
 
 
+    let sort_of_term (term: Term.typ): Sort.t =
+        match term with
+        | Sort sort ->
+            sort
+        | _ ->
+            assert false (* term is not a sort *)
+
+    let split_list (lst: 'a list): 'a * 'a list =
+        match lst with
+        | [] ->
+            assert false (* Illegal call! *)
+        | hd :: tl ->
+            hd, tl
+
+
+    let split_stack (bc: t): item * item list =
+        split_list bc.stack
+
+    let split_binders (bc: t): binder * binder list =
+        split_list bc.binders
+
 
     let map_top (f: item -> item res): t -> t res =
         fun bc ->
-        match bc.stack with
-        | [] ->
-            assert false (* Illegal call. *)
-        | top :: stack ->
-            Result.map
-                (fun item -> {bc with stack = item :: stack})
-                (f top)
+        let top, stack = split_stack bc in
+        Result.map
+            (fun item -> {bc with stack = item :: stack})
+            (f top)
 
 
-    let get_term (bc: t): Term.t * Term.typ =
+    let get_top (bc: t): Term.t * Term.typ * item list =
+        let item, stack = split_stack bc
+        in
+        match item.term with
+        | None ->
+            assert false (* Term construction not yet completed. *)
+        | Some (_, term, typ) ->
+            term, typ, stack
+
+
+
+    let get_final (bc: t): Term.t * Term.typ =
         (* Get the term in the original context. *)
-        match bc.stack with
-        | [item] ->
-            (
-                match item.term with
-                | None ->
-                    assert false (* Term construction not yet completed. *)
-                | Some (_, term, typ) ->
-                    term, typ
-            )
-        | _ ->
-            assert false (* Illegal. Final term not constructed. *)
+        let term, typ, stack = get_top bc
+        in
+        assert (stack = []);
+        let cnt = count bc
+        and cnt0 = count_base bc
+        in
+        match
+            Term.down (cnt - cnt0) term,
+            Term.down (cnt - cnt0) typ
+        with
+        | Some term, Some typ ->
+            term, typ
+        | _, _ ->
+            assert false (* Term or type still contain some holes. *)
 
 
     let put_term
@@ -117,9 +152,6 @@ struct
             (fun item ->
                  assert (item.term = None);
                  let put _ =
-                     Printf.printf "new %s: %s\n"
-                         (string_of_term term bc)
-                         (string_of_term typ bc);
                      Ok {item with term = Some (info, term, typ)}
                  in
                  match item.requirement with
@@ -166,8 +198,9 @@ struct
             match Name_map.find name bc.name_map with
             | [] ->
                 Error (info, Type_error.Name_not_found name)
-            | [idx] ->
-                let typ = Gamma_holes.type_of_variable idx bc.gh
+            | [level] ->
+                let typ = Gamma_holes.type_at_level level bc.gh
+                and idx = Gamma_holes.index_of_level level bc.gh
                 in
                 put_term info (Term.Variable idx) typ bc
             | _ ->
@@ -198,23 +231,37 @@ struct
 
     let start_binder ((info, name): name): t -> t =
         fun bc ->
-        match bc.stack with
-        | [] ->
-            assert false (* Illegal call! *)
-        | item :: stack ->
-            match item.term with
-            | None ->
-                assert false (* Illegal call, type not yet constructed. *)
-            | Some (_, typ, _) ->
-                {name_map =
-                     Name_map.add_local name bc.name_map;
-                 stack;
-                 gh =
-                     Gamma_holes.push_bound name true typ bc.gh;
-                 binders =
-                     {info} :: bc.binders}
+        let item, stack = split_stack bc
+        in
+        match item.term with
+        | None ->
+            assert false (* Illegal call, type not yet constructed. *)
+        | Some (_, typ, sort) ->
+            let sort = sort_of_term sort
+            in
+            {name_map =
+                 Name_map.add_local name bc.name_map;
+             stack;
+             gh =
+                 Gamma_holes.push_bound name true typ bc.gh;
+             binders =
+                 {info; sort; name_map_previous = bc.name_map}
+                 :: bc.binders}
 
 
-    let end_pi (_: Info.t): t -> t res =
-        fun _ -> assert false
+    let end_pi (info: Info.t): t -> t res =
+        fun bc ->
+        let res_tp, res_sort, stack = get_top bc
+        in
+        let term = Gamma_holes.pi 1 res_tp bc.gh
+        and gh = Gamma_holes.remove_bounds 1 bc.gh
+        and res_sort = sort_of_term res_sort
+        in
+        let binder, binders = split_binders bc in
+        let name_map = binder.name_map_previous
+        in
+        let typ = Term.Sort (Sort.pi_sort binder.sort res_sort)
+        in
+        let bc = {gh; stack; binders; name_map} in
+        put_term info term typ bc
 end

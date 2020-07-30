@@ -36,7 +36,7 @@ struct
     let term_tags: term_tag String_map.t =
         String_map.(empty
                     |> add "app" Application
-                    |> add "pi" Pi
+                    |> add "all" Pi
                     |> add "lambda" Lambda)
 
 
@@ -88,15 +88,15 @@ struct
     let name_ws: string located t =
         name |. whitespace
 
+    let char_ws (c: char): unit t =
+        char c |. whitespace
 
     let left_paren_ws: unit t =
-        char '('
-        |. whitespace
+        char_ws '('
 
 
     let right_paren_ws: unit t =
-        char ')'
-        |. whitespace
+        char_ws ')'
 
 
     let parenthesized_located (p: unit -> 'a t): 'a located t =
@@ -189,15 +189,16 @@ struct
         |= one_or_more (expression ())
 
     and pi (range: Located.range): Builder.tl t =
-        (return
+        return
              (fun fargs res ->
                   List.fold_right
                       (fun (name,arg_typ) res_typ _ ->
                            Builder.Construct.pi
                                range name arg_typ res_typ)
                       fargs
-                      res))
-        |= parenthesized formal_arguments
+                      res)
+        |== formal_arguments
+        |. char_ws ':'
         |= result_type ()
 
     and result_type _: Builder.tl t =
@@ -209,6 +210,7 @@ struct
     and formal_argument _: (string located * Builder.tl) t =
         (return (fun name typ -> name, typ))
         |= name_ws
+        |. char_ws ':'
         |= expression ()
 end
 
@@ -228,9 +230,10 @@ end
 module Expression_parser  = Make (Expression)
 
 
+
 let build_expression
-    (src: string)
-    (c: Welltyped.context)
+        (src: string)
+        (c: Welltyped.context)
     : (Welltyped.judgement, Builder.problem) result =
     let open Expression_parser in
     let p = run (expression ()) c src in
@@ -241,17 +244,37 @@ let build_expression
         (Option.value (result p) ())
 
 
+
+let build_expression_empty
+        (src: string)
+    : (Welltyped.judgement, Builder.problem) result
+    =
+    build_expression src Welltyped.empty
+
+
+
+
 let is_term_ok (src: string): bool =
+    let module PP = Pretty_printer.Pretty (String_printer) in
+    let to_string (pp: PP.t): string =
+        String_printer.run (PP.run 0 70 70 pp)
+    in
     match
         build_expression src Welltyped.empty
     with
-    | Ok _ ->
+    | Ok jm ->
+        let module Print = Welltyped.Print (PP) in
+        Printf.printf "%s\n" (to_string (Print.judgement jm));
         true
-    | Error (_, error) ->
-        let module PP = Pretty_printer.Pretty (String_printer) in
+    | Error (range, error) ->
         let module Print = Type_error.Print (PP) in
-        Printf.printf "%s\n"
-            (String_printer.run (PP.run 0 70 70 (Print.print error)));
+        let module Source_print = Position.Print (PP) in
+        Printf.printf "%s\n\n%s\n"
+            (String_printer.run
+                 (PP.run 0 70 70
+                      (Source_print.print_source src range)))
+            (String_printer.run
+                 (PP.run 0 70 70 (Print.print error)));
         false
 
 
@@ -264,7 +287,41 @@ let%test _ =
     is_term_ok "Proposition"
 
 
-(*
+
 let%test _ =
-    is_term_ok "(pi ((A Any) (a A) (x a)) A)"
-   *)
+    is_term_ok "(all (A:Any) (a:A): A)"
+
+
+
+let%test _ =
+    is_term_ok "(all (a:Proposition): Proposition)"
+
+
+let%test _ =
+    is_term_ok "(all (a:Proposition)(x:a): a)"
+
+
+let%test _ =
+    is_term_ok "(all (A:Any) (x:A) (a:Proposition): a)"
+
+
+
+
+let%test _ =
+    match
+        build_expression_empty "(all (A:Any) (a:A): a)"
+    with
+    | Error (_, Type_error.Not_a_type) ->
+        true
+    | _ ->
+        false
+
+
+let%test _ =
+    match
+        build_expression_empty "(all (A:Any) (a:A) (x:a): A)"
+    with
+    | Error (_, Type_error.Not_a_type) ->
+        true
+    | _ ->
+        false

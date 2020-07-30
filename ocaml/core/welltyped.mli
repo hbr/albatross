@@ -11,11 +11,21 @@ open Module_types
 (** Type of a wellformed context. *)
 type context
 
-val empty: context (** An empty context. *)
-
 (** Type of a wellformed context with a term and its type. *)
 type judgement
 
+
+
+(** Printing of welltyped items. *)
+module Print (PP: Pretty_printer.SIG):
+sig
+    val judgement: judgement -> PP.t
+end
+
+
+
+
+val empty: context (** An empty context. *)
 
 (** Extract the context from the encapsulation. *)
 val extract_context: context -> Context.t

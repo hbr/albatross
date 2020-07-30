@@ -6,11 +6,22 @@ open Module_types
 
 type context = Context.t
 
+type judgement = Context.t * Term.t * Term.typ
+
+
+module Print (PP: Pretty_printer.SIG) =
+struct
+    module TP = Term_printer.Pretty (Gamma) (PP)
+
+    let judgement ((c,term,typ): judgement): PP.t =
+        TP.print Term.(Typed (term, typ)) (Context.gamma c)
+end
+
+
+
 let empty: context =
     Context.empty
 
-
-type judgement = Context.t * Term.t * Term.typ
 
 let extract_context (c: context): Context.t =
     c
@@ -39,7 +50,7 @@ struct
         Result.(
             map
                 (fun bc ->
-                     let t, typ = Build.get_term bc in
+                     let t, typ = Build.get_final bc in
                      c, t, typ)
                 (term_builder Build.(make c |> start_term)))
 
