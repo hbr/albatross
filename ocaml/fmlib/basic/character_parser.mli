@@ -2,18 +2,6 @@ open Common
 open Module_types
 
 
-(** Position within a stream.*)
-module Position:
-sig
-  type t
-  val line:   t -> int
-  val column: t -> int
-  val next_line:   t -> t
-  val next_column: t -> t
-end
-
-
-
 module Located:
 sig
   type range = Position.t * Position.t

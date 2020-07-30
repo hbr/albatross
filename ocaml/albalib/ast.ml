@@ -3,7 +3,6 @@ open Alba_core
 
 module Located = Character_parser.Located
 
-module Position = Character_parser.Position
 
 type range = Position.t * Position.t
 

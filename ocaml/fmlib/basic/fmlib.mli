@@ -44,6 +44,7 @@ module Common = Common
 
 (** {2 Parsing }*)
 
+module Position         = Position
 module Character_parser = Character_parser
 module Generic_parser   = Generic_parser
 

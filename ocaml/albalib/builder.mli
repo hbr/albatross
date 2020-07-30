@@ -3,7 +3,7 @@ open Alba_core
 open Ast
 
 
-type pos = Character_parser.Position.t
+type pos = Position.t
 type range = pos * pos
 
 (*

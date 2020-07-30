@@ -1,39 +1,6 @@
 open Common
 open Module_types
 
-module Position:
-sig
-  type t
-  val line: t -> int
-  val column: t -> int
-  val start: t
-  val next: char -> t -> t
-  val next_line: t -> t
-  val next_column: t -> t
-end =
-  struct
-    type t = {line:int; column:int}
-
-    let line (p:t): int = p.line
-
-    let column (p:t): int = p.column
-
-    let start: t =
-      {line = 0; column = 0}
-
-    let next_column (p:t): t =
-      {p with column = p.column + 1}
-
-    let next_line (p:t): t =
-      {line = p.line + 1; column = 0;}
-
-    let next (c:char) (p:t): t =
-      if c = '\n' then
-        next_line p
-      else
-        next_column p
-  end
-
 
 module type CONTEXT =
 sig

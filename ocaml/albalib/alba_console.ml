@@ -15,7 +15,6 @@ module Repl_parser = Parser.Make (Parser.Command)
 
 module Pretty_make (Io:Io.SIG) =
   struct
-    module Position = Character_parser.Position
     module Located = Character_parser.Located
     module Expression = Ast.Expression
     module Out = Fmlib.Io.Output (Io)

@@ -6,7 +6,6 @@ open Ast
 module Algo = Gamma_algo.Make (Gamma)
 
 module Parser     = Parser_lang
-module Position   = Character_parser.Position
 
 
 type pos = Position.t

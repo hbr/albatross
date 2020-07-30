@@ -6,8 +6,8 @@ open Ast
 type 'a located = 'a Character_parser.Located.t
 
 type indent   = Character_parser.Indent.t
-type position = Character_parser.Position.t
-type range    = Character_parser.Position.t * Character_parser.Position.t
+type position = Position.t
+type range    = Position.t * Position.t
 
 
 

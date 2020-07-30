@@ -7,12 +7,12 @@ open Ast
 module Located = Character_parser.Located
 type 'a located = 'a Located.t
 
-module Position = Character_parser.Position
+module Position = Position
 
 module Indent   = Character_parser.Indent
 
 type indent   = Character_parser.Indent.t
-type position = Character_parser.Position.t
+type position = Position.t
 type range    = Position.t * Position.t
 
 

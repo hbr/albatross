@@ -2,7 +2,6 @@ open Fmlib
 open Common
 
 
-module Position = Character_parser.Position
 type pos = Position.t
 type range = pos * pos
 
