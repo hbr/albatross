@@ -1,6 +1,30 @@
 (** Represents a position in a text file. *)
 
+
 type t (** Position in a text file. *)
+
+
+type range = t * t (* A range in a text file. *)
+
+
+
+
+(** Print in memory source files with error markers. *)
+module Print (PP: Pretty_printer.SIG):
+sig
+    (** [print_source_lines lines range] Print the source file given as a
+        sequence of lines with line numbers and highlight the region [range].
+     *)
+    val print_source_lines:
+        string Sequence.t -> range -> PP.t
+
+
+    (** [print_source src range] Print the source file given as a
+        string with line numbers and highlight the region [range].
+     *)
+    val print_source: string -> range -> PP.t
+end
+
 
 
 
