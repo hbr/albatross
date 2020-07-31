@@ -291,8 +291,13 @@ struct
     let end_indented (strict:bool) (s0:t) (s:t): t =
       {s with indent = Indent.end_indented strict s0.indent s.indent}
 
-    let user (s:t): User.t = s.user
-    let update (f:User.t->User.t) (s:t) =
+    let user (s: t): User.t =
+        s.user
+
+    let put (user: User.t) (s: t): t =
+        {s with user}
+
+    let update (f: User.t-> User.t) (s:t) =
       {s with user = f s.user}
 
     let push_context (msg:Context_msg.t) (s:t): t =
@@ -349,6 +354,7 @@ module type COMBINATORS =
 
     type state
     val get_state: state t
+    val put_state: state -> unit t
     val update: (state -> state) -> unit t
 
     val absolute: 'a t -> 'a t
@@ -420,6 +426,9 @@ struct
     let get_state: User.t t =
       Basic.get >>= fun st ->
       return (State.user st)
+
+    let put_state (st: User.t): unit t =
+        Basic.update (fun s -> State.put st s)
 
     let update (f:User.t -> User.t): unit t =
       Basic.update (State.update f)

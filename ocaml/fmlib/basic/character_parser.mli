@@ -131,6 +131,7 @@ module type COMBINATORS =
 
     type state
     val get_state: state t
+    val put_state: state -> unit t
     val update: (state -> state) -> unit t
 
 
