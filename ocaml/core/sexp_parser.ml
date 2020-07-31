@@ -1,9 +1,17 @@
+(** Parser for the intermediate language. *)
+
+
+
+
+
 open Fmlib
 open Module_types
 open Common
 
 
 module Located = Character_parser.Located
+
+type range = Located.range
 
 module Info =
 struct type t = Located.range end
@@ -26,6 +34,8 @@ struct
     type 'a located = Located.range * 'a
 
     include Character_parser.Normal (State) (Final) (Semantic) (Unit)
+
+    type p = parser
 
     type term_tag =
       | Application
@@ -53,6 +63,9 @@ struct
             |> add "def"     Definition
             |> add "class"   Class
       )
+    let _ = declaration_tags
+
+
 
     let located (p: 'a t): 'a located t =
         map
@@ -107,6 +120,7 @@ struct
         |. whitespace
         |== p
         |= located (char ')')
+    let _ = parenthesized_located
 
 
     let parenthesized (p: unit -> 'a t): 'a t =
@@ -129,11 +143,13 @@ struct
                      is_operator_character
                      "operator character")
         |. whitespace
+    let _ = operator
 
 
     let number: string located t =
         located (word Char.is_digit Char.is_digit "digit")
         |. whitespace
+    let _ = number
 
 
 
@@ -168,7 +184,6 @@ struct
         atom
         <|>
         compound ()
-
 
     and compound _: Builder.tl t =
         (return identity)
@@ -212,6 +227,20 @@ struct
         |= name_ws
         |. char_ws ':'
         |= expression ()
+
+
+
+    let judgement: Welltyped.judgement t
+        =
+        expression () >>= fun expr ->
+        get_state >>= fun context ->
+        match
+            (Builder.make_term context (expr ()))
+        with
+        | Ok jm ->
+            return jm
+        | Error error ->
+            fail error
 end
 
 
