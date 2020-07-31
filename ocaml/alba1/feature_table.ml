@@ -13,7 +13,7 @@ open Printf
 module Option = Fmlib.Option
 
 module IntArrayMap = Map.Make(struct
-  let compare = Pervasives.compare
+  let compare = Stdlib.compare
   type t = int array
 end)
 

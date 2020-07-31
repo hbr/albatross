@@ -543,8 +543,6 @@ let induction_goal_predicate
   let t =
     Term.all_quantified (Formals.make nms_inner tps_inner) Formals.empty chn
   in
-  let tp =
-    Context.predicate_of_type (Context.tuple_type_of_types tps_outer c) c in
   let t =
     Context.make_lambda
       (Formals.make nms_outer tps_outer) Formals.empty [] t None c
@@ -1509,8 +1507,6 @@ and prove_inspect
   else
     begin (* Induction on an inductive type *)
       try
-        let ind_idx = Class_table.primary_induction_law cls (PC.class_table pc)
-        in
         match insp.v with
         | Variable ivar ->
            prove_inductive_type insp.i goal ivar cases pc

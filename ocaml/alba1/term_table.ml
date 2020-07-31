@@ -18,7 +18,7 @@ type substitutions =
 
 
 module IntPairMap = Map.Make(struct
-  let compare = Pervasives.compare
+  let compare = Stdlib.compare
   type t = int*int
 end)
 

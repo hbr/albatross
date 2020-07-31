@@ -672,7 +672,7 @@ type feature_name =
 
 module Feature_map = Map.Make(struct
   type t = feature_name
-  let compare = Pervasives.compare
+  let compare = Stdlib.compare
 end)
 
 
@@ -766,12 +766,12 @@ let string_of_module ((m,lib):module_name): string =
 
 module Library_map = Map.Make(struct
   type t = library_name
-  let compare = Pervasives.compare
+  let compare = Stdlib.compare
 end)
 
 module Module_map = Map.Make(struct
   type t = module_name
-  let compare = Pervasives.compare
+  let compare = Stdlib.compare
 end)
 
 

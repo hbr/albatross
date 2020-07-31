@@ -232,7 +232,7 @@ let push_required (tp:type_term) (tb:t): unit =
 let used_type_variables (tp:type_term) (tb:t): int array =
   let used = Term.used_variables tp (globals_beyond tb) in
   let used = Array.of_list used in
-  Array.sort Pervasives.compare used;
+  Array.sort Stdlib.compare used;
   used
 
 

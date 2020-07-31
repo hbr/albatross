@@ -200,7 +200,7 @@ module M =
 
 
     let compare (m1:t) (m2:t): int =
-      Pervasives.compare m1.name m2.name
+      Stdlib.compare m1.name m2.name
 
     let base_name (m:t): int =
       fst m.name

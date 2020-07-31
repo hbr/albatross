@@ -458,7 +458,7 @@ let assumptions_for_variables
           ass
       in
       let insp_vars = Array.of_list insp_vars in
-      Array.sort Pervasives.compare insp_vars;
+      Array.sort Stdlib.compare insp_vars;
       List.filter
         (fun i ->
           try ignore(Search.binsearch i insp_vars); false

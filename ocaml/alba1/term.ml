@@ -33,12 +33,12 @@ exception Term_capture
 exception Empty_term
 
 module TermSet = Set.Make(struct
-  let compare = Pervasives.compare
+  let compare = Stdlib.compare
   type t = term
 end)
 
 module TermMap = Map.Make(struct
-  let compare = Pervasives.compare
+  let compare = Stdlib.compare
   type t = term
 end)
 

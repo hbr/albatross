@@ -59,12 +59,12 @@ end
 
 
 module IntSet = Set.Make(struct
-  let compare = Pervasives.compare
+  let compare = Stdlib.compare
   type t = int
 end)
 
 module IntMap = Map.Make(struct
-  let compare = Pervasives.compare
+  let compare = Stdlib.compare
   type t = int
 end)
 
@@ -142,12 +142,12 @@ let interval_iter (f:int -> unit) (start:int) (beyond:int): unit =
 
 
 module StringSet = Set.Make(struct
-  let compare = Pervasives.compare
+  let compare = Stdlib.compare
   type t = string
 end)
 
 module StringMap = Map.Make(struct
-  let compare = Pervasives.compare
+  let compare = Stdlib.compare
   type t = string
 end)
 
