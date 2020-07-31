@@ -1,9 +1,3 @@
-(** Parser for the intermediate language. *)
-
-
-
-
-
 open Fmlib
 open Module_types
 open Common
@@ -174,9 +168,18 @@ struct
         |. whitespace
 
 
+    let parenthesized_tagged
+            (expecting: string)
+            (map: 'a String_map.t)
+            (p: 'a located -> 'b t)
+        : 'b t
+        =
+        parenthesized
+            (fun _ ->
+                 some_tag expecting map
+                 >>=
+                 p)
 
-    let term_tag: term_tag located t =
-        some_tag "<term tag>" term_tags
 
 
 
@@ -186,17 +189,17 @@ struct
         compound ()
 
     and compound _: Builder.tl t =
-        (return identity)
-        |. left_paren_ws
-        |= (term_tag >>= fun (range,tag) ->
-            match tag with
-            | Application ->
-                application range
-            | Pi ->
-                pi range
-            | Lambda ->
-                assert false)
-        |. right_paren_ws
+        parenthesized_tagged
+            "<term tag>"
+            term_tags
+            (fun (range, tag) ->
+                match tag with
+                | Application ->
+                    application range
+                | Pi ->
+                    pi range
+                | Lambda ->
+                    assert false)
 
     and application (_: Located.range): Builder.tl t =
         (return (fun _ _ -> assert false))
@@ -241,6 +244,36 @@ struct
             return jm
         | Error error ->
             fail error
+
+
+    let declaration _: unit t =
+        parenthesized_tagged
+            "<declaration tag>"
+            declaration_tags
+            (fun (_, tag) ->
+                match tag with
+                | Builtin ->
+                    assert false
+                | Definition ->
+                    assert false
+                | Class ->
+                    assert false)
+
+
+    let declarations _: unit t =
+        map
+            (fun n ->
+                 Printf.printf "%d declarations parsed\n" n;
+                 ())
+            (skip_zero_or_more
+                 (declaration ()))
+
+
+    let run_string
+            (p: Final.t t) (c: Welltyped.context) (src: string)
+        : p
+        =
+        run (p |. expect_end) c src
 end
 
 
@@ -251,13 +284,12 @@ end
 (* --------------------------------------------------------------------- *)
 
 
-module Expression =
-struct
-    type t = Builder.tl
-end
+module Expression_parser =
+    Make (struct type t = Builder.tl end)
 
-module Expression_parser  = Make (Expression)
 
+module Context_parser =
+    Make (Unit)
 
 
 let build_expression
@@ -265,7 +297,7 @@ let build_expression
         (c: Welltyped.context)
     : (Welltyped.judgement, Builder.problem) result =
     let open Expression_parser in
-    let p = run (expression ()) c src in
+    let p = run_string (expression ()) c src in
     assert (has_ended p);
     assert (has_succeeded p);
     Builder.make_term
@@ -280,6 +312,16 @@ let build_expression_empty
     =
     build_expression src Welltyped.empty
 
+
+let build_context
+        (src: string) (c: Welltyped.context)
+    : Welltyped.context
+    =
+    let open Context_parser in
+    let p = run_string (declarations ()) c src in
+    assert (has_ended p);
+    assert (has_succeeded p);
+    state p
 
 
 
@@ -354,3 +396,14 @@ let%test _ =
         true
     | _ ->
         false
+
+
+
+
+
+(* Filling the context *)
+let%test _ =
+    let _ = build_context
+            "(builtin Int: Any)"
+            Welltyped.empty in
+    true
