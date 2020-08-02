@@ -151,7 +151,7 @@ struct
 
     let atom: Builder.tl t =
         map
-            (fun (range,name) _ -> Builder.Construct.identifier range name)
+            (fun (range,name) _ -> Builder.identifier range name)
             name_ws
 
 
@@ -211,7 +211,7 @@ struct
              (fun fargs res ->
                   List.fold_right
                       (fun (name,arg_typ) res_typ _ ->
-                           Builder.Construct.pi
+                           Builder.pi
                                range name arg_typ res_typ)
                       fargs
                       res)
@@ -222,14 +222,20 @@ struct
     and result_type _: Builder.tl t =
         expression ()
 
-    and formal_arguments _: (string located * Builder.tl) list t =
+    and formal_arguments _: Builder.formal_argument list t =
         zero_or_more (parenthesized formal_argument)
 
-    and formal_argument _: (string located * Builder.tl) t =
+    and formal_argument _: Builder.formal_argument t =
         (return (fun name typ -> name, typ))
         |= name_ws
         |. char_ws ':'
         |= expression ()
+
+    and signature _: Builder.signature t =
+        return (fun fargs res -> fargs, res)
+        |== formal_arguments
+        |. char_ws ':'
+        |== expression
 
 
 
@@ -253,7 +259,16 @@ struct
             (fun (_, tag) ->
                 match tag with
                 | Builtin ->
-                    assert false
+                    get_state >>= fun context ->
+                    name_ws >>= fun name ->
+                    signature () >>= fun sign ->
+                    (
+                        match Builder.make_builtin context name sign with
+                        | Ok context ->
+                            put_state context
+                        | Error error ->
+                            fail error
+                    )
                 | Definition ->
                     assert false
                 | Class ->
@@ -400,10 +415,10 @@ let%test _ =
 
 
 
-
+(*
 (* Filling the context *)
 let%test _ =
     let _ = build_context
             "(builtin Int: Any)"
             Welltyped.empty in
-    true
+    true*)

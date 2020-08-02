@@ -43,65 +43,63 @@ val extract_judgement: judgement -> Context.t * Term.t * Term.typ
 (** A builder for welltyped terms in wellformed contexts. *)
 module Builder (Info: ANY):
 sig
-    type name = Info.t * string
-
-
     type problem = Info.t * Type_error.t
-
-
-    (** ['a t] Combinator type building an ['a].
-
-        [term t] is the type of a combinator, building a term
-
-        [defintion t] is the type of a combinator building a definition
-
-        [context t] is the type of a combinator building and adding a global
-        declaration to the context
-     *)
-    type t
-
-    type tl = unit -> t
 
     (** ['a res] The result of a building process. *)
     type 'a res = ('a, problem) result
 
-    (** [make_term c term] Build the term [term] in context [c]. *)
-    val make_term: context -> t -> judgement res
+
+    type t
+
+    type tl = unit -> t
+
+
+    type name = Info.t * string
+
+    type formal_argument = name * tl
+
+    type signature = formal_argument list * tl
 
 
     (** Combinators: Primitive and compound combinators to build terms or build
         and add globals to the context. *)
-    module Construct:
-    sig
-        val sort:
-            Info.t -> Sort.t -> t
 
-        val variable:
-            Info.t -> int -> t
+    val sort:
+        Info.t -> Sort.t -> t
 
-        val identifier: Info.t -> string -> t
-        (** [identifier info name] Build the term represented by [name]. *)
+    val variable:
+        Info.t -> int -> t
 
-
-        val unknown: Info.t -> t
-        (** Unknown term. The compiler is asked to derive. *)
+    val identifier: Info.t -> string -> t
+    (** [identifier info name] Build the term represented by [name]. *)
 
 
-        val application:
-            Info.t -> tl -> tl -> t
+    val unknown: Info.t -> t
+    (** Unknown term. The compiler is asked to derive. *)
 
 
-        (** [lambda name typ exp] Build the lambda term [\ (name: typ) := exp].
-         *)
-        val lambda:
-            Info.t -> name -> tl -> tl -> t
+    val application:
+        Info.t -> tl -> tl -> t
 
 
-        (** [pi name typ res] Build the product [all (name: typ): res].
-         *)
-        val pi:
-            Info.t -> name -> tl -> tl -> t
-    end
+    (** [lambda name typ exp] Build the lambda term [\ (name: typ) := exp].
+    *)
+    val lambda:
+        Info.t -> name -> tl -> tl -> t
+
+
+    (** [pi name typ res] Build the product [all (name: typ): res].
+    *)
+    val pi:
+        Info.t -> name -> tl -> tl -> t
+
+
+
+    (** [make_term c term] Build the term [term] in context [c]. *)
+    val make_term: context -> t -> judgement res
+
+    val make_builtin:
+        context -> name -> signature -> context res
 end
 
 

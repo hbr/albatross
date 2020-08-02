@@ -191,8 +191,6 @@ let variable_of_bound (i: int) (gh: t): Term.t =
                 gh)
 
 
-
-
 let value (idx: int) (gh: t): Term.t option =
     if is_entry idx gh then
         Option.map

@@ -23,12 +23,17 @@ struct
     type item = {
         requirement: requirement option;
         nargs: int;
-        term: (Info.t * Term.t * Term.typ) option;
+        term: (Info.t
+               * Term.t
+               * Term.typ
+               * int  (* size of the context *)
+               ) option;
     }
 
     type binder = {
         info: Info.t;
         sort: Sort.t;
+        binder_level: int;
         name_map_previous: Name_map.t;
     }
 
@@ -72,6 +77,31 @@ struct
         Term_printer.string_of_term
             term
             (Gamma_holes.context bc.gh)
+
+
+    let into_new_binder (idx: int) (term: Term.t): Term.t
+        (* Put [term] which is welltyped in the current context into a new
+           binder where [idx] is the index of the current binder to which is
+           bound.
+
+                gamma ... idx ... |- term
+                                  ^
+                                  cnt
+
+           [idx] is no longer refereced in the new term. All referenced to [idx]
+           are replace by 0 i.e. the new bound variable. All other variables
+           have to be increased by one, because they have to escape the new
+           binder.
+        *)
+        =
+        Term.map
+            (fun i ->
+                 if i = idx then
+                     0
+                 else
+                     i + 1)
+            term
+
 
 
     let push_item
@@ -121,8 +151,12 @@ struct
         match item.term with
         | None ->
             assert false (* Term construction not yet completed. *)
-        | Some (_, term, typ) ->
-            term, typ, stack
+        | Some (_, term, typ, n) ->
+            assert (n <= count bc);
+            let delta = count bc - n in
+            Term.up delta term,
+            Term.up delta typ,
+            stack
 
 
 
@@ -152,7 +186,9 @@ struct
             (fun item ->
                  assert (item.term = None);
                  let put _ =
-                     Ok {item with term = Some (info, term, typ)}
+                     Ok {item with
+                         term =
+                             Some (info, term, typ, count bc)}
                  in
                  match item.requirement with
                  | None ->
@@ -231,37 +267,67 @@ struct
 
     let start_binder ((info, name): name): t -> t =
         fun bc ->
-        let item, stack = split_stack bc
+        let typ, sort, stack = get_top bc
         in
-        match item.term with
-        | None ->
-            assert false (* Illegal call, type not yet constructed. *)
-        | Some (_, typ, sort) ->
-            let sort = sort_of_term sort
-            in
-            {name_map =
-                 Name_map.add_local name bc.name_map;
-             stack;
-             gh =
-                 Gamma_holes.push_bound name true typ bc.gh;
-             binders =
-                 {info; sort; name_map_previous = bc.name_map}
-                 :: bc.binders}
+        let sort = sort_of_term sort
+        in
+        {name_map =
+             Name_map.add_local name bc.name_map;
+         stack;
+         gh =
+             Gamma_holes.push_bound name true typ bc.gh;
+         binders =
+             {info;
+              sort;
+              name_map_previous = bc.name_map;
+              binder_level = count bc
+             }
+             ::
+             bc.binders
+        }
 
 
     let end_pi (info: Info.t): t -> t res =
+        (* Make [all (x:A): R] and put it on top of the stack.
+
+           - [R] is on top of the stack.
+
+           - [(x:A)] is the most recent binder.
+
+           1. Get [x:A]
+
+           2. Pop [R] and lift it into the new binder
+
+           3. Pop the most recent binder
+
+           4. Push [all (x:A): R] onto the stack
+        *)
         fun bc ->
-        let res_tp, res_sort, stack = get_top bc
+        let binder, binders = split_binders bc
+        and res_typ, res_sort, stack = get_top bc
         in
-        let term = Gamma_holes.pi 1 res_tp bc.gh
-        and gh = Gamma_holes.remove_bounds 1 bc.gh
-        and res_sort = sort_of_term res_sort
+        let arg_typ =
+            Gamma_holes.type_at_level binder.binder_level bc.gh
+        and arg_name =
+            Gamma_holes.name_at_level binder.binder_level bc.gh
+        and arg_idx =
+            Gamma_holes.index_of_level binder.binder_level bc.gh
         in
-        let binder, binders = split_binders bc in
-        let name_map = binder.name_map_previous
-        in
-        let typ = Term.Sort (Sort.pi_sort binder.sort res_sort)
-        in
-        let bc = {gh; stack; binders; name_map} in
-        put_term info term typ bc
+        (* MISSING: Check holes in [arg_typ]. As long as binders are fully
+         * typed, there are no holes. *)
+        put_term
+            info
+            (Term.product0
+                 arg_name
+                 true
+                 arg_typ
+                 (into_new_binder arg_idx res_typ))
+            (Term.Sort
+                 (Sort.pi_sort
+                      binder.sort
+                      (sort_of_term res_sort)))
+            {gh = bc.gh;  (* removing of binders in [gh] no longer necessary. *)
+             stack;
+             binders;
+             name_map = binder.name_map_previous}
 end
