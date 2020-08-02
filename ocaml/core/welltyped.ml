@@ -58,9 +58,9 @@ struct
         fun bc ->
         let open Result in
         let open Build in
-        map
-            (start_binder name)
-            (typ () (start_type bc))
+        typ () (start_type bc)
+        >>=
+        start_binder name
 
 
     let make_type (typ: tl): t =
@@ -123,11 +123,11 @@ struct
 
     let make_builtin
             (_: context)
-            (_: name)
+            (name: name)
             (_: signature)
         : context res
         =
-        assert false
+        Error (fst name, Type_error.Not_yet_implemented "<builtins>")
 end
 
 

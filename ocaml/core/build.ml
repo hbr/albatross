@@ -4,6 +4,7 @@
 
 open Fmlib
 open Module_types
+open Common
 
 
 
@@ -122,6 +123,7 @@ struct
         | _ ->
             assert false (* term is not a sort *)
 
+
     let split_list (lst: 'a list): 'a * 'a list =
         match lst with
         | [] ->
@@ -207,6 +209,41 @@ struct
             bc
 
 
+
+    let check_naming_convention
+            (info: Info.t) (name: string) (typ: Term.typ) (bc: t)
+        : t res
+        =
+        let is_lower, is_upper =
+            if String.length name > 0 then
+                let c = name.[0] in
+                Char.is_lower c, Char.is_upper c
+            else
+                false, false
+        and tv fail =
+            if not fail then
+                Ok bc
+            else
+                Error (info, Type_error.Naming_type_variable)
+        and no_tv fail =
+            if not fail then
+                Ok bc
+            else
+                Error (info, Type_error.Naming_no_type_variable)
+        in
+        match Algo.sort_of_kind typ bc.gh with
+        | None ->
+            (* proof or object, must be lower case or operator *)
+            no_tv is_upper
+        | Some Sort.Proposition ->
+            (* must be lower case or operator *)
+            no_tv is_upper
+        | Some Sort.Any _ ->
+            (* mus be upper case or operator *)
+            tv is_lower
+
+
+
     let make_sort (info: Info.t) (s: Sort.t) (bc: t): t res =
         let add =
             put_term
@@ -265,26 +302,28 @@ struct
         assert false
 
 
-    let start_binder ((info, name): name): t -> t =
+    let start_binder ((info, name): name): t -> t res =
         fun bc ->
-        let typ, sort, stack = get_top bc
-        in
-        let sort = sort_of_term sort
-        in
-        {name_map =
-             Name_map.add_local name bc.name_map;
-         stack;
-         gh =
-             Gamma_holes.push_bound name true typ bc.gh;
-         binders =
-             {info;
-              sort;
-              name_map_previous = bc.name_map;
-              binder_level = count bc
-             }
-             ::
-             bc.binders
-        }
+        let open Result in
+        let typ, sort, stack = get_top bc in
+        let sort = sort_of_term sort in
+        check_naming_convention info name typ bc
+        >>= fun _ ->
+        Ok
+            {name_map =
+                 Name_map.add_local name bc.name_map;
+             stack;
+             gh =
+                 Gamma_holes.push_bound name true typ bc.gh;
+             binders =
+                 {info;
+                  sort;
+                  name_map_previous = bc.name_map;
+                  binder_level = count bc
+                 }
+                 ::
+                 bc.binders
+            }
 
 
     let end_pi (info: Info.t): t -> t res =
@@ -314,7 +353,10 @@ struct
             Gamma_holes.index_of_level binder.binder_level bc.gh
         in
         (* MISSING: Check holes in [arg_typ]. As long as binders are fully
-         * typed, there are no holes. *)
+         * typed, there are no holes.
+         *
+         * If bound variable is untyped, check the naming conventions.
+         *)
         put_term
             info
             (Term.product0

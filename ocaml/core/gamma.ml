@@ -6,6 +6,14 @@ module Pi_info = Term.Pi_info
 
 module Lambda_info = Term.Lambda_info
 
+let builtin_types: String_set.t =
+    let open String_set in
+    empty
+    |> add "int_type"
+    |> add "char_type"
+    |> add "string_type"
+let _ = builtin_types
+
 
 let builtin_functions: Value.t String_map.t =
     let open String_map in

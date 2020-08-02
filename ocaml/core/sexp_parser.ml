@@ -379,6 +379,7 @@ let%test _ =
 
 
 
+
 let%test _ =
     is_term_ok "(all (a:Proposition): Proposition)"
 
@@ -392,6 +393,7 @@ let%test _ =
 
 
 
+(* Failure cases *)
 
 let%test _ =
     match
@@ -401,6 +403,37 @@ let%test _ =
         true
     | _ ->
         false
+
+let%test _ =
+    match
+        build_expression_empty "(all (a:Any): Any)"
+    with
+    | Error (_, Type_error.Naming_type_variable) ->
+        true
+    | _ ->
+        false
+
+
+let%test _ =
+    match
+        build_expression_empty "(all (A:Any) (B:A): A)"
+    with
+    | Error (_, Type_error.Naming_no_type_variable) ->
+        true
+    | _ ->
+        false
+
+
+let%test _ =
+    match
+        build_expression_empty "(all (A:Proposition): A)"
+    with
+    | Error (_, Type_error.Naming_no_type_variable) ->
+        true
+    | _ ->
+        false
+
+
 
 
 let%test _ =
