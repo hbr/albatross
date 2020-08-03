@@ -10,10 +10,15 @@ type range = Position.range
 type 'a located = range * 'a
 
 
+let join_ranges ((pos1,_): range) ((_,pos2)): range =
+    pos1, pos2
+
+
+
 module Builder = Welltyped.Builder (struct type t = range end)
-(*
+
 type builder = range * Builder.t
-*)
+
 
 
 
@@ -110,14 +115,12 @@ struct
 
 
     let parenthesized_located (p: unit -> 'a t): 'a located t =
-        (return
-             (fun ((p1,_),_) v ((_,p2),_) ->
-                  (p1,p2), v))
-        |= located (char '(')
-        |. whitespace
+        return
+            (fun (r1, _) v (r2, _) ->
+                 join_ranges r1 r2, v)
+        |= located (char_ws '(')
         |== p
-        |= located (char ')')
-    let _ = parenthesized_located
+        |= located (char_ws ')')
 
 
     let parenthesized (p: unit -> 'a t): 'a t =
@@ -179,19 +182,19 @@ struct
 
 
 
-    let atom: Builder.t t =
+    let atom: builder t =
         map
-            (fun (range,name) -> Builder.identifier range name)
+            (fun (range,name) -> range, Builder.identifier range name)
             name_ws
 
 
 
-    let rec expression _: Builder.t t =
+    let rec expression _: builder t =
         atom
         <|>
         compound ()
 
-    and compound _: Builder.t t =
+    and compound _: builder t =
         parenthesized_tagged
             "<term tag>"
             term_tags
@@ -204,7 +207,7 @@ struct
                 | Lambda ->
                     assert false)
 
-    and application (_: Located.range): Builder.t t =
+    and application (_: Located.range): builder t =
         return (fun _ args ->
             let _, _ = List.split_head_tail args in
 
@@ -212,33 +215,39 @@ struct
         |= expression ()
         |= one_or_more (expression ())
 
-    and pi (range: Located.range): Builder.t t =
+    and pi (_: range): builder t =
         return
              (fun fargs res ->
-                  List.fold_right
-                      (fun (name,arg_typ) res_typ ->
-                           Builder.pi
-                               range name arg_typ res_typ)
-                      fargs
-                      res)
+                assert (fargs <> []);
+                List.fold_right
+                    (fun (r1, (name,arg_typ)) (r2, res_typ) ->
+                         let range = join_ranges r1 r2 in
+                         range,
+                         Builder.pi
+                             range name arg_typ res_typ)
+                    fargs
+                    res)
         |== formal_arguments
         |. char_ws ':'
         |= result_type ()
 
-    and result_type _: Builder.t t =
+    and result_type _: builder t =
         expression ()
 
-    and formal_arguments _: Builder.formal_argument list t =
-        zero_or_more (parenthesized formal_argument)
+    and formal_arguments _: Builder.formal_argument located list t =
+        zero_or_more (parenthesized_located formal_argument)
 
     and formal_argument _: Builder.formal_argument t =
-        (return (fun name typ -> name, typ))
+        (return (fun name (_, typ) -> name, typ))
         |= name_ws
         |. char_ws ':'
         |== expression
 
     and signature _: Builder.signature t =
-        return (fun fargs res -> fargs, res)
+        return
+            (fun fargs (_, res) ->
+                 List.map snd fargs,
+                 res)
         |== formal_arguments
         |. char_ws ':'
         |== expression
@@ -247,7 +256,7 @@ struct
 
     let judgement: Welltyped.judgement t
         =
-        expression () >>= fun expr ->
+        expression () >>= fun (_, expr) ->
         get_state >>= fun context ->
         match
             (Builder.make_term context expr)
@@ -310,7 +319,7 @@ end
 
 
 module Expression_parser =
-    Make (struct type t = Builder.t end)
+    Make (struct type t = builder end)
 
 
 module Context_parser =
@@ -343,7 +352,7 @@ let build_expression
     assert (has_succeeded p);
     Builder.make_term
         c
-        (Option.value (result p))
+        (snd (Option.value (result p)))
 
 
 
@@ -417,6 +426,7 @@ let%test _ =
 
 let%test _ =
     is_term_ok "(all (A:Any) (x:A) (a:Proposition): a)"
+
 
 (*
 let%test _ =
