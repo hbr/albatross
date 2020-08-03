@@ -5,12 +5,16 @@ open Common
 
 module Located = Character_parser.Located
 
-type range = Located.range
+type range = Position.range
 
-module Info =
-struct type t = Located.range end
+type 'a located = range * 'a
 
-module Builder = Welltyped.Builder (Info)
+
+module Builder = Welltyped.Builder (struct type t = range end)
+(*
+type builder = range * Builder.t
+*)
+
 
 
 module Make (Final: ANY) =
@@ -22,10 +26,9 @@ struct
 
     module Semantic =
         struct
-            type t = Located.range * Type_error.t
+            type t = range * Type_error.t
         end
 
-    type 'a located = Located.range * 'a
 
     include Character_parser.Normal (State) (Final) (Semantic) (Unit)
 
@@ -149,13 +152,6 @@ struct
 
 
 
-    let atom: Builder.tl t =
-        map
-            (fun (range,name) _ -> Builder.identifier range name)
-            name_ws
-
-
-
     let some_tag (expecting: string) (map: 'a String_map.t): 'a located t =
         (backtrackable
             (name_ws >>= fun (range, tag) ->
@@ -183,12 +179,19 @@ struct
 
 
 
-    let rec expression _: Builder.tl t =
+    let atom: Builder.t t =
+        map
+            (fun (range,name) -> Builder.identifier range name)
+            name_ws
+
+
+
+    let rec expression _: Builder.t t =
         atom
         <|>
         compound ()
 
-    and compound _: Builder.tl t =
+    and compound _: Builder.t t =
         parenthesized_tagged
             "<term tag>"
             term_tags
@@ -201,16 +204,19 @@ struct
                 | Lambda ->
                     assert false)
 
-    and application (_: Located.range): Builder.tl t =
-        (return (fun _ _ -> assert false))
+    and application (_: Located.range): Builder.t t =
+        return (fun _ args ->
+            let _, _ = List.split_head_tail args in
+
+             assert false)
         |= expression ()
         |= one_or_more (expression ())
 
-    and pi (range: Located.range): Builder.tl t =
+    and pi (range: Located.range): Builder.t t =
         return
              (fun fargs res ->
                   List.fold_right
-                      (fun (name,arg_typ) res_typ _ ->
+                      (fun (name,arg_typ) res_typ ->
                            Builder.pi
                                range name arg_typ res_typ)
                       fargs
@@ -219,7 +225,7 @@ struct
         |. char_ws ':'
         |= result_type ()
 
-    and result_type _: Builder.tl t =
+    and result_type _: Builder.t t =
         expression ()
 
     and formal_arguments _: Builder.formal_argument list t =
@@ -229,7 +235,7 @@ struct
         (return (fun name typ -> name, typ))
         |= name_ws
         |. char_ws ':'
-        |= expression ()
+        |== expression
 
     and signature _: Builder.signature t =
         return (fun fargs res -> fargs, res)
@@ -244,7 +250,7 @@ struct
         expression () >>= fun expr ->
         get_state >>= fun context ->
         match
-            (Builder.make_term context (expr ()))
+            (Builder.make_term context expr)
         with
         | Ok jm ->
             return jm
@@ -294,13 +300,17 @@ end
 
 
 
+
+
+
+
 (* --------------------------------------------------------------------- *)
 (* Unit tests *)
 (* --------------------------------------------------------------------- *)
 
 
 module Expression_parser =
-    Make (struct type t = Builder.tl end)
+    Make (struct type t = Builder.t end)
 
 
 module Context_parser =
@@ -314,10 +324,26 @@ let build_expression
     let open Expression_parser in
     let p = run_string (expression ()) c src in
     assert (has_ended p);
+    if not (has_succeeded p) then
+    (
+        let module PP = Pretty_printer.Pretty (String_printer) in
+        let err = error p in
+        if Error.is_semantic err then
+            assert false
+        else (
+            let module Source_print = Position.Print (PP) in
+            let pos = position p in
+            Printf.printf "%s\n"
+                (String_printer.run
+                     (PP.run 0 70 70
+                          (Source_print.print_source src (pos,pos))));
+        )
+
+    );
     assert (has_succeeded p);
     Builder.make_term
         c
-        (Option.value (result p) ())
+        (Option.value (result p))
 
 
 
@@ -337,6 +363,7 @@ let build_context
     assert (has_ended p);
     assert (has_succeeded p);
     state p
+let _ = build_context
 
 
 
@@ -391,6 +418,15 @@ let%test _ =
 let%test _ =
     is_term_ok "(all (A:Any) (x:A) (a:Proposition): a)"
 
+(*
+let%test _ =
+    is_term_ok
+        "(all (A: Any)
+         (F: (all (x:A): Any))
+         (a: A)
+         (f: (all (x:A): (app F x)))
+         : F A)"
+*)
 
 
 (* Failure cases *)

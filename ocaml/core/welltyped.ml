@@ -43,30 +43,25 @@ struct
 
     type t = Build.t -> Build.t res
 
-    type tl = unit -> t
-
     type name = Info.t * string
 
-    type formal_argument = name * tl
+    type formal_argument = name * t
 
-    type signature = formal_argument list * tl
-
-
+    type signature = formal_argument list * t
 
 
-    let binder (name: name) (typ: tl): t =
+
+
+    let make_type (typ: t): t =
         fun bc ->
-        let open Result in
-        let open Build in
-        typ () (start_type bc)
-        >>=
-        start_binder name
+        Build.(typ (start_type bc))
 
 
-    let make_type (typ: tl): t =
+    let binder (name: name) (typ: t): t =
         fun bc ->
-        let open Build in
-        (typ () (start_type bc))
+        Result.(make_type typ bc
+                >>=
+                Build.start_binder name)
 
 
     let sort (info: Info.t) (s: Sort.t): t =
@@ -83,6 +78,18 @@ struct
     let unknown (_: Info.t): t =
         assert false
 
+
+    let application (info: Info.t) (f: t) (arg: t): t =
+        let open Result in
+        fun bc ->
+        f (Build.start_application bc)
+        >>= fun bc ->
+        arg (Build.start_argument bc)
+        >>=
+        Build.end_application info
+    let _ = application
+
+(*
     let application (info: Info.t) (f: tl) (arg: tl): t =
         let open Result in
         fun bc ->
@@ -92,17 +99,17 @@ struct
             Build.start_argument bc
             |> arg ()
             >>= fun bc ->
-            Build.end_application info bc
+            Build.end_application info bc*)
 
 
     let lambda
-            (_: Info.t) (_: name) (_: tl) (_: tl)
+            (_: Info.t) (_: name) (_: t) (_: t)
         : t
         =
         assert false
 
     let pi
-            (info: Info.t) (name: name) (arg_typ: tl) (res_typ: tl)
+            (info: Info.t) (name: name) (arg_typ: t) (res_typ: t)
         : t
         =
         fun bc ->
@@ -143,7 +150,7 @@ struct
 
 
     let check_term (term: Term.t) (c: context): judgement res =
-        let rec check term _ =
+        let rec check term =
             let open Builder
             in
             match term with
@@ -165,5 +172,5 @@ struct
     in
     Result.map_error
         snd
-        (Builder.make_term c (check term ()))
+        (Builder.make_term c (check term))
 end

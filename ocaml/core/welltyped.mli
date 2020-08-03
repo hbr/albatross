@@ -51,14 +51,12 @@ sig
 
     type t
 
-    type tl = unit -> t
-
 
     type name = Info.t * string
 
-    type formal_argument = name * tl
+    type formal_argument = name * t
 
-    type signature = formal_argument list * tl
+    type signature = formal_argument list * t
 
 
     (** Combinators: Primitive and compound combinators to build terms or build
@@ -79,19 +77,19 @@ sig
 
 
     val application:
-        Info.t -> tl -> tl -> t
+        Info.t -> t -> t -> t
 
 
     (** [lambda name typ exp] Build the lambda term [\ (name: typ) := exp].
     *)
     val lambda:
-        Info.t -> name -> tl -> tl -> t
+        Info.t -> name -> t -> t -> t
 
 
     (** [pi name typ res] Build the product [all (name: typ): res].
     *)
     val pi:
-        Info.t -> name -> tl -> tl -> t
+        Info.t -> name -> t -> t -> t
 
 
 
