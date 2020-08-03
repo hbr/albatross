@@ -208,12 +208,19 @@ struct
                     assert false)
 
     and application (_: Located.range): builder t =
-        return (fun _ args ->
-            let _, _ = List.split_head_tail args in
-
-             assert false)
-        |= expression ()
-        |= one_or_more (expression ())
+        let make_application (r1, f) (r2, arg) =
+            let range = join_ranges r1 r2 in
+            range, Builder.application range f arg
+        in
+        return
+            (fun f arg args ->
+                 List.fold_left
+                     make_application
+                     (make_application f arg)
+                     args)
+        |== expression
+        |== expression
+        |= zero_or_more (expression ())
 
     and pi (_: range): builder t =
         return
@@ -435,7 +442,7 @@ let%test _ =
          (F: (all (x:A): Any))
          (a: A)
          (f: (all (x:A): (app F x)))
-         : F A)"
+         : (app F a))"
 *)
 
 

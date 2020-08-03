@@ -89,17 +89,6 @@ struct
         Build.end_application info
     let _ = application
 
-(*
-    let application (info: Info.t) (f: tl) (arg: tl): t =
-        let open Result in
-        fun bc ->
-            Build.start_application bc
-            |> f ()
-            >>= fun bc ->
-            Build.start_argument bc
-            |> arg ()
-            >>= fun bc ->
-            Build.end_application info bc*)
 
 
     let lambda
