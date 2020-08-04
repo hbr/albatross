@@ -43,18 +43,13 @@ end
 
 module Signature =
 struct
-    (*
-        nargs
-        final type, final type normalized
-        [(t0, arg0, info0), (t1, arg1, info1), ... ]
-     *)
     type t = {
-        typ: Term.typ;
-        typ_n: Term.typ;
+        typ: Term.typ;      (* Result type *)
+        typ_n: Term.typ;    (* Result type normalized *)
         is_sort: bool;
         args: (
-            Term.typ         (* Argumnt type *)
-            * Term.typ       (* Original result type *)
+            Term.typ         (* Original type *)
+            * Term.typ       (* Argument type type *)
             * Term.Pi_info.t
         ) array;
     }
@@ -75,6 +70,10 @@ struct
             is_sort = is_sort typ_n;
             args = [||];
         }
+
+    let has_arguments (sign: t): bool =
+        Array.length sign.args > 0
+
 
     let push
             (arg: Term.typ)
@@ -100,6 +99,12 @@ struct
         else
             let typ, _, _ = sign.args.(0) in
             typ
+
+
+    let argument_type (sign: t): Term.typ =
+        assert (has_arguments sign);
+        let _, arg_typ, _ = sign.args.(0) in
+        arg_typ
 
 
     let normal (sign: t): Term.typ =

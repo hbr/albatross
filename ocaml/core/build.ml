@@ -1,5 +1,76 @@
 (** A core internal module to support term building. Do not use outside of core
-    directly. *)
+    directly.
+
+
+
+    Basic Idea
+    ==========
+
+
+    There is a stack of to be built terms. When the construction of term starts,
+    the term can get some type requirement.
+
+    Invariant
+    =========
+
+    - Only terms which are welltyped in the context are constructed.
+
+    - All terms on the stack are welltyped and satisfy their requirements or
+      have still a chance to satisfy their requirement. The satisfaction of the
+      requirements is checked by putting a term to the stack.
+
+
+    Used Typing Rules
+    =================
+
+    Product
+    -------
+
+        Gamma  |- A: sA
+        Gamma, x:A |- R: sR
+        ----------------------------------------
+        Gamma |- (all (x: A). R) : pi_sort(sA,sR)
+
+
+        sA              sR              pi_sort(sA,sR)
+        ----------------------------------------------
+        *               Proposition     Proposition
+        Proposition     Any(i)          Any(i)
+        Any(i)          Any(j)          Any(max(i,j))
+
+
+        A and R must be types. If this is satisfied, the product can be built in
+        a typesafe manner.
+
+        Generating the product term, it is checked, if A is a kind and if x
+        occurs in R.
+
+        First build A with the requirement of being a type. Then make a new
+        binder (x:A). The build R with the requirement of being a type. Finally
+        build all (x:A): R.
+
+
+    Application
+    -----------
+
+        Gamma |- f: all (x: A). B
+        Gamma |- a: A'
+        Gamma |- A' <= A             -- subtype
+        ----------------------------------------
+        Gamma |- f a: B[x:=a]
+
+        We start to build [f a] with a possible requirement which has to be
+        satisfied after being applied to [nargs] arguments.
+
+        [start_application] increments nargs by one. Then it builds [f]. The
+        function term can only be built if its type is a product type.
+
+        Then we start a new term with the required type [A] from the type of
+        [f].
+
+
+
+*)
 
 
 open Fmlib
@@ -13,19 +84,23 @@ module Signature = Gamma_algo.Signature
 module Make (Info: ANY) =
 struct
     module Algo = Gamma_algo.Make (Gamma_holes)
+    module Uni = Unifier.Make (Gamma_holes)
 
     type name =
         Info.t * string
 
 
     type requirement =
+        | No_requirement
         | Some_type
+        | Result_type of Term.typ
 
 
 
 
     type item = {
-        requirement: requirement option;
+        requirement: requirement;
+        satisfied: bool;
         nargs: int;
         term: (Info.t
                * Term.t
@@ -109,14 +184,16 @@ struct
 
 
     let push_item
-            (requirement: requirement option)
+            (requirement: requirement)
             (nargs: int)
             (bc: t)
         : t
         =
         {bc with
          stack =
-             {requirement; nargs; term = None} :: bc.stack}
+             {requirement; nargs; satisfied = false; term = None}
+             ::
+             bc.stack}
 
 
     let sort_of_term (term: Term.typ): Sort.t =
@@ -163,7 +240,8 @@ struct
         in
         match item.term with
         | None ->
-            assert false (* Term construction not yet completed. *)
+            assert false (* Cannot happen. Term construction not yet completed.
+                         *)
         | Some (_, term, sign, n) ->
             assert (n <= count bc);
             let delta = count bc - n in
@@ -196,33 +274,49 @@ struct
 
 
     let put_term
-            (info: Info.t) (term: Term.t) (typ: Term.typ): t -> t res
+            (info: Info.t) (term: Term.t) (typ: Term.typ)
+            (decr: int) (* decrement nargs *)
+        : t -> t res
         =
-        (* Check that [term] satisfies the requirements. If yes, put it as the
-         * new top term. Otherwise report an error. *)
+        (* Check that welltyped [term] of [typ] satisfies the requirements. If
+         * yes, put it as the new top term. Otherwise report an error. *)
+        assert (decr = 0 || decr = 1);
         fun bc ->
         let sign = Algo.signature typ bc.gh
+        and item, stack = split_stack bc
         in
-        map_top
-            (fun item ->
-                 assert (item.term = None);
-                 let put _ =
-                     Ok {item with
-                         term =
-                             Some (info, term, sign, count bc)}
-                 in
-                 match item.requirement with
-                 | None ->
-                     put ()
-                 | Some req ->
-                     match req with
-                     | Some_type ->
-                         if Signature.is_sort item.nargs sign then
-                             put ()
-                         else
-                             Error (info, Type_error.Not_a_type)
-            )
-            bc
+        assert (decr <= item.nargs);
+        let nargs_new = item.nargs - decr in
+        let put bc =
+            Ok {bc with
+                stack =
+                    {item with
+                     nargs = nargs_new;
+                     term =
+                         Some (info, term, sign, count bc)}
+                    ::
+                    stack}
+        in
+        match item.requirement with
+        | No_requirement ->
+            put bc
+
+        | Some_type ->
+            if Signature.is_sort item.nargs sign then
+                put bc
+            else
+                Error (info, Type_error.Not_a_type)
+
+        | Result_type req_typ ->
+            if nargs_new = 0 then
+                match Uni.unify typ req_typ true bc.gh with
+                | None ->
+                    assert false
+                | Some gh ->
+                    put {bc with gh}
+            else
+                assert false
+
 
 
 
@@ -267,6 +361,7 @@ struct
                 info
                 (Term.Sort s)
                 (Term.Sort (Sort.type_of s))
+                0
         in
         match s with
         | Sort.Proposition ->
@@ -295,7 +390,7 @@ struct
                 let typ = Gamma_holes.type_at_level level bc.gh
                 and idx = Gamma_holes.index_of_level level bc.gh
                 in
-                put_term info (Term.Variable idx) typ bc
+                put_term info (Term.Variable idx) typ 0 bc
             | _ ->
                 Error (info,
                        Type_error.Not_yet_implemented
@@ -306,18 +401,24 @@ struct
 
     let start_term: t -> t =
         (* Start a term without any requirements. *)
-        push_item None 0
+        push_item No_requirement 0
 
 
 
 
     let start_type: t -> t =
         (* Start the analysis of a type. *)
-        push_item (Some Some_type) 0
+        push_item Some_type 0
+
+
+
 
 
 
     let start_application: t -> t =
+        (* Start an application [f a]. The top term contains the requirement for
+         * [f a]. In order to convert this into a requirement for [f], the
+         * number of expected arguments has to be increased by one. *)
         map_top0
             (fun item ->
                  assert (item.term = None);
@@ -325,11 +426,49 @@ struct
 
 
 
-    let start_argument (_: t): t =
-        assert false
+
+
+    let start_argument (bc: t): t =
+        (* The top term is a function term. Extract the argument type as a
+         * requirement for the argument to be constructed. *)
+        let item, _ = split_stack bc in
+        assert (item.term <> None);
+        assert (item.nargs > 0);
+        let _, _, sign, n = Option.value item.term in
+        let req_typ =
+            Term.up
+                (count bc - n)
+                (Signature.argument_type sign)
+        in
+        push_item
+            (Result_type req_typ)
+            0
+            bc
+
+
+
+
 
     let end_application (_: Info.t) (_: t): t res =
+        (* The stack looks like
+         *
+         *      stack = ... f arg
+         *
+         *  [arg] is a valid argument for [f].
+         *
+         *
+         *  1. Pop [arg]
+         *
+         *  2. Replace [f] by [f a] and reduce the number of expected arguments
+         *     by one.
+         *
+         *  3. If the requirements for [f] had not yet been satisfied, check the
+         *     requirements (if possible) or leave the requirements as not yet
+         *     checked.
+         *)
         assert false
+
+
 
 
     let start_binder ((info, name): name): t -> t res =
@@ -382,6 +521,7 @@ struct
         and arg_idx =
             Gamma_holes.index_of_level binder.binder_level bc.gh
         in
+        let kind = Algo.is_kind arg_typ bc.gh in
         (* MISSING: Check holes in [arg_typ]. As long as binders are fully
          * typed, there are no holes.
          *
@@ -389,15 +529,17 @@ struct
          *)
         put_term
             info
-            (Term.product0
+            (Term.make_product
                  arg_name
-                 true
+                 true (* is_typed *)
+                 kind
                  arg_typ
                  (into_new_binder arg_idx res_typ))
             (Term.Sort
                  (Sort.pi_sort
                       binder.sort
                       (sort_of_term res_sort)))
+            0
             {gh = Gamma_holes.pop_bound bc.gh;
              stack;
              binders;

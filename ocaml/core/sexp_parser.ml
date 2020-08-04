@@ -442,7 +442,7 @@ let%test _ =
         "(all (A: Any) \
          \n  (F: (all (y: A): Any))\
          \n  (a: A)\
-         \n  (f: (all (x: A): (app F x)))\
+         \n  (f: (all (x: A): (app F A)))\
          \n  : (app F a))"
 *)
 
