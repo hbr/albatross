@@ -37,17 +37,21 @@ module Lambda_info =
 
 
 module Pi_info =
-  struct
+struct
     type t = {
         name:  string; (* name of the argument *)
+        typed: bool;   (* false, if user has given no type information 'all x:
+                          R' *)
         arrow: bool;   (* user has written 'A -> B' instead of 'all (nme:A):
-                          R' *)
-        typed: bool    (* false, if user has given no type information 'all x:
-                          R' *)
+                          R' or name does not occur in [R] *)
+        kind: bool;    (* Argument type is a kind *)
       }
 
-    let name (i:t): string =
-      i.name
+
+    let make name typed arrow kind = {name; typed; arrow; kind}
+
+    let name (info: t): string =
+        info.name
 
     let is_anonymous (i:t): bool =
       i.name = "_"
@@ -58,16 +62,19 @@ module Pi_info =
     let is_typed (i:t): bool =
       i.typed
 
+    let is_implicit (info: t): bool =
+        info.kind && not info.arrow
+
+
     let arrow: t =
-      {name = "_"; arrow = true; typed = true}
+        {name = "_"; arrow = true; typed = true; kind = false}
 
     let typed (name: string) : t =
-      {name; arrow = false; typed = true}
+        {name; arrow = false; typed = true; kind = false}
 
     let untyped (name: string) : t =
-      {name; arrow = false; typed = false}
-
-  end
+        {name; arrow = false; typed = false; kind = false}
+end
 
 
 
@@ -553,6 +560,23 @@ let fold_free (f: int -> 'a -> 'a) (term: t) (start: 'a): 'a =
             (fun i start -> Monad.Identity.return (f i start))
             term
             start)
+
+
+
+
+let make_product
+        (name: string)
+        (typed: bool)
+        (kind: bool)
+        (arg_typ: typ)
+        (res_typ: typ)
+    : t
+    =
+    assert (name <> "");
+    let arrow = not (has_variable 0 res_typ) in
+    let info = Pi_info.make name typed arrow kind in
+    Pi (arg_typ, res_typ, info)
+
 
 
 

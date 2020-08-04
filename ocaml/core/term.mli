@@ -18,15 +18,21 @@ end
 
 module Pi_info:
 sig
-  type t
-  val name:         t -> string
-  val is_anonymous: t -> bool
-  val is_arrow:     t -> bool
-  val is_typed:     t -> bool
+    type t
 
-  val arrow: t
-  val typed:   string -> t
-  val untyped: string -> t
+    (** [make name typed arrow kind] *)
+    val make: string -> bool -> bool -> bool -> t
+
+    val name:         t -> string
+    val is_anonymous: t -> bool
+    val is_arrow:     t -> bool
+    val is_typed:     t -> bool
+
+    val is_implicit:  t -> bool
+
+    val arrow: t
+    val typed:   string -> t
+    val untyped: string -> t
 end
 
 
@@ -85,6 +91,9 @@ val applications: t -> t list -> t
 
 val lambda0: string -> bool -> typ -> t -> t
 val product0: string -> bool -> typ -> typ -> typ
+
+(** [make_product name typed kind arg_typ res_typ] *)
+val make_product: string -> bool -> bool -> typ -> typ -> typ
 
 val lambda:  string -> typ -> t -> t
 val product: string -> typ -> typ -> t
