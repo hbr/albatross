@@ -214,6 +214,7 @@ struct
         in
         return
             (fun f arg args ->
+                 assert (args = []); (* to be removed *)
                  List.fold_left
                      make_application
                      (make_application f arg)
@@ -438,11 +439,11 @@ let%test _ =
 (*
 let%test _ =
     is_term_ok
-        "(all (A: Any)
-         (F: (all (x:A): Any))
-         (a: A)
-         (f: (all (x:A): (app F x)))
-         : (app F a))"
+        "(all (A: Any) \
+         \n  (F: (all (y: A): Any))\
+         \n  (a: A)\
+         \n  (f: (all (x: A): (app F x)))\
+         \n  : (app F a))"
 *)
 
 

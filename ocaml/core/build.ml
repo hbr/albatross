@@ -7,6 +7,7 @@ open Module_types
 open Common
 
 
+module Signature = Gamma_algo.Signature
 
 
 module Make (Info: ANY) =
@@ -21,12 +22,14 @@ struct
         | Some_type
 
 
+
+
     type item = {
         requirement: requirement option;
         nargs: int;
         term: (Info.t
                * Term.t
-               * Term.typ
+               * Signature.t
                * int  (* size of the context *)
                ) option;
     }
@@ -124,19 +127,15 @@ struct
             assert false (* term is not a sort *)
 
 
-    let split_list (lst: 'a list): 'a * 'a list =
-        match lst with
-        | [] ->
-            assert false (* Illegal call! *)
-        | hd :: tl ->
-            hd, tl
 
 
     let split_stack (bc: t): item * item list =
-        split_list bc.stack
+        List.split_head_tail bc.stack
+
 
     let split_binders (bc: t): binder * binder list =
-        split_list bc.binders
+        List.split_head_tail bc.binders
+
 
 
     let map_top (f: item -> item res): t -> t res =
@@ -147,17 +146,29 @@ struct
             (f top)
 
 
+
+
+    let map_top0 (f: item -> item): t -> t =
+        fun bc ->
+        match map_top (fun item -> Ok (f item)) bc with
+        | Ok bc ->
+            bc
+        | Error _ ->
+            assert false (* Illegal call. *)
+
+
+
     let get_top (bc: t): Term.t * Term.typ * item list =
         let item, stack = split_stack bc
         in
         match item.term with
         | None ->
             assert false (* Term construction not yet completed. *)
-        | Some (_, term, typ, n) ->
+        | Some (_, term, sign, n) ->
             assert (n <= count bc);
             let delta = count bc - n in
             Term.up delta term,
-            Term.up delta typ,
+            Term.up delta (Signature.typ sign),
             stack
 
 
@@ -180,17 +191,25 @@ struct
             assert false (* Term or type still contain some holes. *)
 
 
+
+
+
+
     let put_term
             (info: Info.t) (term: Term.t) (typ: Term.typ): t -> t res
         =
+        (* Check that [term] satisfies the requirements. If yes, put it as the
+         * new top term. Otherwise report an error. *)
         fun bc ->
+        let sign = Algo.signature typ bc.gh
+        in
         map_top
             (fun item ->
                  assert (item.term = None);
                  let put _ =
                      Ok {item with
                          term =
-                             Some (info, term, typ, count bc)}
+                             Some (info, term, sign, count bc)}
                  in
                  match item.requirement with
                  | None ->
@@ -198,13 +217,10 @@ struct
                  | Some req ->
                      match req with
                      | Some_type ->
-                         (
-                             match typ with
-                             | Term.Sort _ ->
-                                 put ()
-                             | _ ->
-                                 Error (info, Type_error.Not_a_type)
-                         )
+                         if Signature.is_sort item.nargs sign then
+                             put ()
+                         else
+                             Error (info, Type_error.Not_a_type)
             )
             bc
 
@@ -244,6 +260,7 @@ struct
 
 
 
+
     let make_sort (info: Info.t) (s: Sort.t) (bc: t): t res =
         let add =
             put_term
@@ -261,6 +278,8 @@ struct
                 add bc
 
 
+
+
     let make_identifier (info: Info.t) (name: string): t -> t res =
         fun bc ->
         if name = "Proposition" then
@@ -272,6 +291,7 @@ struct
             | [] ->
                 Error (info, Type_error.Name_not_found name)
             | [level] ->
+                let level = Gamma_holes.adapted_level level bc.gh in
                 let typ = Gamma_holes.type_at_level level bc.gh
                 and idx = Gamma_holes.index_of_level level bc.gh
                 in
@@ -282,9 +302,13 @@ struct
                            "<name overloading>")
 
 
+
+
     let start_term: t -> t =
         (* Start a term without any requirements. *)
         push_item None 0
+
+
 
 
     let start_type: t -> t =
@@ -292,8 +316,14 @@ struct
         push_item (Some Some_type) 0
 
 
-    let start_application (_: t): t =
-        assert false
+
+    let start_application: t -> t =
+        map_top0
+            (fun item ->
+                 assert (item.term = None);
+                 {item with nargs = item.nargs + 1})
+
+
 
     let start_argument (_: t): t =
         assert false
@@ -368,7 +398,7 @@ struct
                  (Sort.pi_sort
                       binder.sort
                       (sort_of_term res_sort)))
-            {gh = bc.gh;  (* removing of binders in [gh] no longer necessary. *)
+            {gh = Gamma_holes.pop_bound bc.gh;
              stack;
              binders;
              name_map = binder.name_map_previous}

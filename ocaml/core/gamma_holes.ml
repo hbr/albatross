@@ -144,6 +144,17 @@ let level_of_index (idx: int) (gh: t): int =
     Gamma.level_of_index idx gh.base
 
 
+let adapted_level (level: int) (gh: t): int =
+    let cnt0 = count_base gh in
+    if level < cnt0 then
+        level
+    else (
+        let i_bound = level - cnt0 in
+        assert (i_bound < count_bounds gh);
+        fst gh.bounds.(i_bound)
+    )
+
+
 
 let is_entry (idx: int) (gh: t): bool =
     idx < count_entries gh
@@ -343,6 +354,11 @@ let push_bound (name: string) (typed: bool) (typ: Term.typ) (gh: t): t =
 let remove_bounds (n: int) (gh: t): t =
     assert (n <= count_bounds gh);
     {gh with bounds = Array.remove_last n gh.bounds}
+
+
+
+let pop_bound: t -> t =
+    remove_bounds 1
 
 
 

@@ -47,6 +47,9 @@ val name_of_index: int -> t -> string
 val index_of_level: int -> t -> int
 
 
+val adapted_level: int -> t -> int
+
+
 
 val definition_term: int -> t -> Term.t option
 
@@ -83,6 +86,7 @@ val variable_of_bound: int -> t -> Term.t
     Precondition:
     {[i < count_bounds gh]}
 *)
+
 
 
 
@@ -192,6 +196,12 @@ val remove_bounds: int -> t -> t
 
     Remove the [n] last bound variables.
 *)
+
+
+val pop_bound: t -> t
+(** [pop_bound gh] is equivalent to [remove_bounds 1 gh]
+*)
+
 
 
 val push_local: string -> Term.typ -> t -> t

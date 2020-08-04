@@ -7,6 +7,7 @@ type name_violation =
 val strings_of_violation: name_violation -> string * string
 
 
+
 module type GAMMA =
 sig
     type t
@@ -51,6 +52,17 @@ sig
 end
 
 
+
+module Signature:
+sig
+    type t
+
+    val typ: t -> Term.typ
+
+    (** [is_sort nargs sign] Is the signature [sign] a sort after having been
+     * applied to [nargs] arguments? *)
+    val is_sort: int -> t -> bool
+end
 
 
 
@@ -164,4 +176,7 @@ sig
 
     val check_naming_convention:
         string -> Term.typ -> Gamma.t -> (unit, name_violation) result
+
+
+    val signature: Term.typ -> Gamma.t -> Signature.t
 end
