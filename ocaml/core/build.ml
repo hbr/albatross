@@ -78,8 +78,6 @@ open Module_types
 open Common
 
 
-module Signature = Gamma_algo.Signature
-
 
 module Make (Info: ANY) =
 struct
@@ -104,7 +102,7 @@ struct
         nargs: int;
         term: (Info.t
                * Term.t
-               * Signature.t
+               * Term.typ
                * int  (* size of the context *)
                ) option;
     }
@@ -242,12 +240,20 @@ struct
         | None ->
             assert false (* Cannot happen. Term construction not yet completed.
                          *)
-        | Some (_, term, sign, n) ->
+        | Some (_, term, typ, n) ->
             assert (n <= count bc);
             let delta = count bc - n in
             Term.up delta term,
-            Term.up delta (Signature.typ sign),
+            Term.up delta typ,
             stack
+
+
+
+    let pop_top (bc: t): Term.t * Term.typ * t =
+        let term, typ, stack = get_top bc
+        in
+        term, typ, {bc with stack}
+
 
 
 
@@ -272,56 +278,81 @@ struct
 
 
 
+    let set_term
+            (info: Info.t) (term: Term.t) (typ: Term.typ)
+        : t -> t
+        =
+        fun bc ->
+        let item, stack = split_stack  bc in
+        {bc with
+         stack =
+             {item with
+              term =
+                  Some (info, term, typ, count bc)}
+             ::
+             stack}
+
+
 
     let put_term
             (info: Info.t) (term: Term.t) (typ: Term.typ)
-            (decr: int) (* decrement nargs *)
         : t -> t res
         =
-        (* Check that welltyped [term] of [typ] satisfies the requirements. If
-         * yes, put it as the new top term. Otherwise report an error. *)
-        assert (decr = 0 || decr = 1);
+        (*  Two cases:
+
+            1. nargs = 0:
+                Check that welltyped [term] of [typ] satisfies the requirements.
+                If yes, put it as the new top term. Otherwise report an error.
+
+            2. nargs > 0:
+                Check that the term is a function term. If yes, put it as the
+                new top term and push a new item for the expected argument onto
+                the stack. Otherwise report an error.
+        *)
         fun bc ->
-        let sign = Algo.signature typ bc.gh
-        and item, stack = split_stack bc
+        let item, _ = split_stack bc
         in
-        assert (decr <= item.nargs);
-        let nargs_new = item.nargs - decr in
         let put bc =
-            Ok {bc with
-                stack =
-                    {item with
-                     nargs = nargs_new;
-                     term =
-                         Some (info, term, sign, count bc)}
-                    ::
-                    stack}
+            Ok (set_term info term typ bc)
         in
-        match item.requirement with
-        | No_requirement ->
-            put bc
-
-        | Some_type ->
-            if Signature.is_sort item.nargs sign then
+        if item.nargs = 0 then
+            match item.requirement with
+            | No_requirement ->
                 put bc
-            else
-                Error (info, Type_error.Not_a_type)
 
-        | Result_type req_typ ->
-            if nargs_new = 0 then
-                match Uni.unify typ req_typ true bc.gh with
-                | None ->
-                    Error (
-                        info,
-                        Type_error.Wrong_type (
-                            req_typ,
-                            typ,
-                            Gamma_holes.context bc.gh
-                        ))
-                | Some gh ->
-                    put {bc with gh}
-            else
-                assert false (* nyi: multiargument application *)
+            | Some_type ->
+                if Term.is_sort typ then
+                    put bc
+                else
+                    Error (info, Type_error.Not_a_type)
+
+            | Result_type req_typ ->
+                (
+                    match Uni.unify typ req_typ true bc.gh with
+                    | None ->
+                        Error (
+                            info,
+                            Type_error.Wrong_type (
+                                req_typ,
+                                typ,
+                                Gamma_holes.context bc.gh
+                            ))
+                    | Some gh ->
+                        put {bc with gh}
+                )
+        else
+            let typ_n = Algo.key_normal typ bc.gh in
+            match typ_n with
+            | Term.Pi (arg_tp, _, _) ->
+                Ok (
+                    set_term info term typ_n bc
+                    |> push_item (Result_type arg_tp) 0
+                )
+            | _ ->
+                Error (info,
+                       Type_error.Not_a_function (
+                           typ, Gamma_holes.context bc.gh)
+                )
 
 
 
@@ -367,7 +398,6 @@ struct
                 info
                 (Term.Sort s)
                 (Term.Sort (Sort.type_of s))
-                0
         in
         match s with
         | Sort.Proposition ->
@@ -396,7 +426,7 @@ struct
                 let typ = Gamma_holes.type_at_level level bc.gh
                 and idx = Gamma_holes.index_of_level level bc.gh
                 in
-                put_term info (Term.Variable idx) typ 0 bc
+                put_term info (Term.Variable idx) typ bc
             | _ ->
                 Error (info,
                        Type_error.Not_yet_implemented
@@ -419,6 +449,29 @@ struct
 
 
 
+    (* Build Function Application
+       --------------------------
+
+       initial state:
+            An empty item is on top of the stack which represents the
+            requirement for the whole application.
+
+       start_application:
+            Increase the number of expected arguments by one.
+
+       build the function term:
+            The top of the stack is replaced by the built function term. A new
+            item with the requirement of the function argument is pushed onto
+            the stack.
+
+       build the argument term:
+            The built argument term is on top of the stack.
+
+       end_application:
+            The function term and the argument term are on top of the stack.
+            Pop the argument term and replace the function term with the
+            application and decrease the number of expected arguments by one.
+    *)
 
 
     let start_application: t -> t =
@@ -433,46 +486,26 @@ struct
 
 
 
-
-    let start_argument (bc: t): t =
-        (* The top term is a function term. Extract the argument type as a
-         * requirement for the argument to be constructed. *)
-        let item, _ = split_stack bc in
-        assert (item.term <> None);
-        assert (item.nargs > 0);
-        let _, _, sign, n = Option.value item.term in
-        let req_typ =
-            Term.up
-                (count bc - n)
-                (Signature.argument_type sign)
+    let end_application (info: Info.t) (bc: t): t res =
+        let arg, _, bc = pop_top bc in
+        let f, typ, _  = get_top bc in
+        let bc =
+            map_top0
+                (fun item ->
+                     assert (item.nargs > 0);
+                     {item with nargs = item.nargs - 1})
+                bc
         in
-        push_item
-            (Result_type req_typ)
-            0
-            bc
-
-
-
-
-
-    let end_application (_: Info.t) (_: t): t res =
-        (* The stack looks like
-         *
-         *      stack = ... f arg
-         *
-         *  [arg] is a valid argument for [f].
-         *
-         *
-         *  1. Pop [arg]
-         *
-         *  2. Replace [f] by [f a] and reduce the number of expected arguments
-         *     by one.
-         *
-         *  3. If the requirements for [f] had not yet been satisfied, check the
-         *     requirements (if possible) or leave the requirements as not yet
-         *     checked.
-         *)
-        assert false
+        match typ with
+        | Pi (_, res_tp, _) ->
+            put_term
+                info
+                (Term.application f arg)
+                (Term.apply res_tp arg)
+                bc
+        | _ ->
+            assert false (* Cannot happen. [f] has already been checked to have
+                            a function type. *)
 
 
 
@@ -545,7 +578,6 @@ struct
                  (Sort.pi_sort
                       binder.sort
                       (sort_of_term res_sort)))
-            0
             {gh = Gamma_holes.pop_bound bc.gh;
              stack;
              binders;

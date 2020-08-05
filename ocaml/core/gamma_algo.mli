@@ -53,22 +53,6 @@ end
 
 
 
-module Signature:
-sig
-    type t
-
-    val typ: t -> Term.typ
-
-
-    (** The type of the next argument. *)
-    val argument_type: t -> Term.typ
-
-
-    (** [is_sort nargs sign] Is the signature [sign] a sort after having been
-     * applied to [nargs] arguments? *)
-    val is_sort: int -> t -> bool
-end
-
 
 
 module Make (Gamma: GAMMA):
@@ -181,7 +165,4 @@ sig
 
     val check_naming_convention:
         string -> Term.typ -> Gamma.t -> (unit, name_violation) result
-
-
-    val signature: Term.typ -> Gamma.t -> Signature.t
 end

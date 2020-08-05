@@ -41,84 +41,6 @@ end
 
 
 
-module Signature =
-struct
-    type t = {
-        typ: Term.typ;      (* Result type *)
-        typ_n: Term.typ;    (* Result type normalized *)
-        is_sort: bool;
-        args: (
-            Term.typ         (* Original type *)
-            * Term.typ       (* Argument type type *)
-            * Term.Pi_info.t
-        ) array;
-    }
-
-
-    let is_sort typ =
-        match typ with
-        | Term.Sort _ ->
-            true
-        | _ ->
-            false
-
-
-    let make (typ:Term.typ) (typ_n: Term.typ): t =
-        {
-            typ;
-            typ_n;
-            is_sort = is_sort typ_n;
-            args = [||];
-        }
-
-    let has_arguments (sign: t): bool =
-        Array.length sign.args > 0
-
-
-    let push
-            (arg: Term.typ)
-            (typ: Term.typ) (typ_n: Term.typ)
-            (info: Term.Pi_info.t)
-            (sign: t)
-        : t
-        =
-        {
-            typ;
-            typ_n;
-            is_sort = is_sort typ_n;
-            args =
-                Array.push
-                    (sign.typ, arg, info)
-                    sign.args;
-        }
-
-
-    let typ (sign: t): Term.typ =
-        if Array.length sign.args = 0 then
-            sign.typ
-        else
-            let typ, _, _ = sign.args.(0) in
-            typ
-
-
-    let argument_type (sign: t): Term.typ =
-        assert (has_arguments sign);
-        let _, arg_typ, _ = sign.args.(0) in
-        arg_typ
-
-
-    let normal (sign: t): Term.typ =
-        sign.typ_n
-
-
-    let is_sort (nargs: int) (sign: t): bool =
-        nargs = Array.length sign.args
-        &&
-        sign.is_sort
-end
-
-
-
 
 
 
@@ -379,19 +301,4 @@ struct
                 Error Upper_for_object
             else
                 Ok ()
-
-
-    let signature (typ: Term.typ) (c: t): Signature.t =
-        let typ_n = key_normal typ c in
-        let sign = Signature.make typ typ_n in
-        let rec make sign c =
-            match Signature.normal sign with
-            | Pi (arg, res, info ) ->
-                let c1 = push_local (Term.Pi_info.name info) arg c in
-                let res_n = key_normal res c1 in
-                make (Signature.push arg res res_n info sign) c1
-            | _ ->
-                sign
-        in
-        make sign c
 end

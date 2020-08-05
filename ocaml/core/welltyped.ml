@@ -83,11 +83,10 @@ struct
         let open Result in
         fun bc ->
         f (Build.start_application bc)
-        >>= fun bc ->
-        arg (Build.start_argument bc)
+        >>=
+        arg
         >>=
         Build.end_application info
-    let _ = application
 
 
 

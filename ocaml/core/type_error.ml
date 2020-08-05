@@ -10,6 +10,7 @@ type t =
   | Naming_type_variable
   | Name_not_found of string
   | Wrong_type of Term.typ * Term.typ * Gamma.t
+  | Not_a_function of Term.typ * Gamma.t
   | Not_yet_implemented of string
 
 
@@ -54,6 +55,15 @@ struct
             <+> wrap_words "but the highlighted term has the type"
             <+> cut
             <+> nest 4 (cut <+> Term_print.print act_typ gamma)
+            <+> cut <+> cut
+
+        | Not_a_function (typ, gamma) ->
+            wrap_words
+                "I was expecting a function, because there are \
+                more arguments to come. But this term is not a function. \
+                It has the type"
+            <+> cut
+            <+> nest 4 (cut <+> Term_print.print typ gamma)
             <+> cut <+> cut
 
         | Not_yet_implemented what ->

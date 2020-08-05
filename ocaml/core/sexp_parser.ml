@@ -436,6 +436,14 @@ let%test _ =
     is_term_ok "(all (A:Any) (x:A) (a:Proposition): a)"
 
 
+let%test _ =
+    is_term_ok
+        "(all (A: Any) \
+         \n  (F: (all (y: A): Any))\
+         \n  (a: A)\
+         \n  (f: (all (x: A): (app F x)))\
+         \n  : (app F a))"
+
 
 
 (* Failure cases *)
@@ -493,6 +501,16 @@ let%test _ =
 
 let%test _ =
     match
+        build_expression_empty "(app Any Any)"
+    with
+    | Error (_, Type_error.Not_a_function (_, _)) ->
+        true
+    | _ ->
+        false
+
+
+let%test _ =
+    match
         build_expression_empty
             "(all (A: Any) (F: (all (x: A): Any)): (app F A))"
     with
@@ -505,15 +523,6 @@ let%test _ =
 
 (* New tests *)
 
-(*
-let%test _ =
-    is_term_ok
-        "(all (A: Any) \
-         \n  (F: (all (y: A): Any))\
-         \n  (a: A)\
-         \n  (f: (all (x: A): (app F A)))\
-         \n  : (app F a))"
-*)
 
 
 
