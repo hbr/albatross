@@ -9,12 +9,15 @@ type t =
   | Naming_no_type_variable
   | Naming_type_variable
   | Name_not_found of string
+  | Wrong_type of Term.typ * Term.typ * Gamma.t
   | Not_yet_implemented of string
 
 
 
 module Print (P: Pretty_printer.SIG) =
 struct
+    module Term_print = Term_printer.Pretty (Gamma) (P)
+
     let print (error: t): P.t =
         let open P in
         match error with
@@ -40,9 +43,19 @@ struct
                 only for object variables, proofs and propositions."
             <+> cut
 
-        | Not_yet_implemented what ->
-            string (what ^ " is not yet implemented") <+> cut
-
         | Name_not_found name ->
             string ("Cannot find <" ^ name ^ ">") <+> cut
+
+        | Wrong_type (req_typ, act_typ, gamma) ->
+            wrap_words "I was expecting a term which has the type"
+            <+> cut
+            <+> nest 4 (cut <+> Term_print.print req_typ gamma)
+            <+> cut <+> cut
+            <+> wrap_words "but the highlighted term has the type"
+            <+> cut
+            <+> nest 4 (cut <+> Term_print.print act_typ gamma)
+            <+> cut <+> cut
+
+        | Not_yet_implemented what ->
+            string (what ^ " is not yet implemented") <+> cut
 end

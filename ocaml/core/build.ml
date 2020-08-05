@@ -311,11 +311,17 @@ struct
             if nargs_new = 0 then
                 match Uni.unify typ req_typ true bc.gh with
                 | None ->
-                    assert false
+                    Error (
+                        info,
+                        Type_error.Wrong_type (
+                            req_typ,
+                            typ,
+                            Gamma_holes.context bc.gh
+                        ))
                 | Some gh ->
                     put {bc with gh}
             else
-                assert false
+                assert false (* nyi: multiargument application *)
 
 
 
