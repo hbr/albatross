@@ -114,6 +114,10 @@ struct
         char_ws ')'
 
 
+    let assign_ws: unit t =
+        string ":=" |. whitespace
+
+
     let parenthesized_located (p: unit -> 'a t): 'a located t =
         return
             (fun (r1, _) v (r2, _) ->
@@ -279,7 +283,7 @@ struct
         parenthesized_tagged
             "<declaration tag>"
             declaration_tags
-            (fun (_, tag) ->
+            (fun (r1, tag) ->
                 match tag with
                 | Builtin ->
                     get_state >>= fun context ->
@@ -293,7 +297,22 @@ struct
                             fail error
                     )
                 | Definition ->
-                    assert false
+                    get_state >>= fun context ->
+                    name_ws >>= fun name ->
+                    signature () >>= fun sign ->
+                    assign_ws >>= fun _ ->
+                    expression () >>= fun (r2,exp) ->
+                    (
+                        let range = join_ranges r1 r2 in
+                        match
+                            Builder.make_definition
+                                range name sign exp context
+                        with
+                        | Ok context ->
+                            put_state context
+                        | Error error ->
+                            fail error
+                    )
                 | Class ->
                     assert false)
 
@@ -327,11 +346,15 @@ end
 
 
 module Expression_parser =
-    Make (struct type t = builder end)
+struct
+    include Make (struct type t = builder end)
+end
 
 
 module Context_parser =
-    Make (Unit)
+struct
+    include Make (Unit)
+end
 
 
 let build_expression
@@ -372,12 +395,35 @@ let build_expression_empty
 
 
 let build_context
-        (src: string) (c: Welltyped.context)
+        (src: string)
+        (c: Welltyped.context)
     : Welltyped.context
     =
     let open Context_parser in
     let p = run_string (declarations ()) c src in
     assert (has_ended p);
+    if not (has_succeeded p) then
+    (
+        let module PP = Pretty_printer.Pretty (String_printer) in
+        let module Source_print = Position.Print (PP) in
+        let to_string (pp: PP.t): string =
+            String_printer.run (PP.run 0 70 70 pp)
+        in
+        let source_to_string src range =
+            to_string (Source_print.print_source src range)
+        in
+        let err = error p in
+        if Error.is_semantic err then
+            let range, error = Error.semantic err in
+            let module Print = Type_error.Print (PP) in
+            Printf.printf "%s\n\n%s\n"
+                (source_to_string src range)
+                (to_string (Print.print error))
+        else (
+            let pos = position p in
+            Printf.printf "%s\n" (source_to_string src (pos,pos))
+        )
+    );
     assert (has_succeeded p);
     state p
 let _ = build_context
@@ -400,11 +446,8 @@ let is_term_ok (src: string): bool =
         let module Print = Type_error.Print (PP) in
         let module Source_print = Position.Print (PP) in
         Printf.printf "%s\n\n%s\n"
-            (String_printer.run
-                 (PP.run 0 70 70
-                      (Source_print.print_source src range)))
-            (String_printer.run
-                 (PP.run 0 70 70 (Print.print error)));
+            (to_string (Source_print.print_source src range))
+            (to_string (Print.print error));
         false
 
 
@@ -530,6 +573,6 @@ let%test _ =
 (*
 let%test _ =
     let _ = build_context
-            "(builtin Int: Any)"
+            "(def identity (A: Any) (x: A): A := x)"
             Welltyped.empty in
     true*)

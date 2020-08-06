@@ -123,6 +123,17 @@ struct
         : context res
         =
         Error (fst name, Type_error.Not_yet_implemented "<builtins>")
+
+
+    let make_definition
+            (info: Info.t)
+            (_: name)
+            (_: signature)
+            (_: t)
+            (_: context)
+        : context res
+        =
+        Error (info, Type_error.Not_yet_implemented "<definitions>")
 end
 
 

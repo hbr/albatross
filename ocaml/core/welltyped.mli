@@ -98,6 +98,9 @@ sig
 
     val make_builtin:
         context -> name -> signature -> context res
+
+    val make_definition:
+        Info.t -> name -> signature -> t -> context -> context res
 end
 
 
