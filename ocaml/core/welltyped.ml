@@ -39,6 +39,8 @@ struct
 
     type problem = Info.t * Type_error.t
 
+    module Res = Result.Make (struct type t = problem end)
+
     type 'a res = ('a, problem) result
 
     type t = Build.t -> Build.t res
@@ -57,6 +59,13 @@ struct
         Build.(typ (start_type bc))
 
 
+
+    let make_typed_term (term: t): t =
+        fun bc ->
+        Build.(term (start_typed_term bc))
+
+
+
     let binder (name: name) (typ: t): t =
         fun bc ->
         Result.(make_type typ bc
@@ -64,16 +73,21 @@ struct
                 Build.start_binder name)
 
 
+
     let sort (info: Info.t) (s: Sort.t): t =
         Build.make_sort info s
+
 
 
     let variable (_: Info.t) (_: int): t =
         assert false
 
 
+
     let identifier (info: Info.t) (name: string): t =
         Build.make_identifier info name
+
+
 
     let unknown (_: Info.t): t =
         assert false
@@ -96,6 +110,8 @@ struct
         =
         assert false
 
+
+
     let pi
             (info: Info.t) (name: name) (arg_typ: t) (res_typ: t)
         : t
@@ -107,6 +123,9 @@ struct
         >>= Build.end_pi info
 
 
+
+
+
     let make_term (c: context) (term_builder: t): judgement res =
         Result.(
             map
@@ -114,6 +133,8 @@ struct
                      let t, typ = Build.get_final bc in
                      c, t, typ)
                 (term_builder Build.(make c |> start_term)))
+
+
 
 
     let make_builtin
@@ -125,14 +146,27 @@ struct
         Error (fst name, Type_error.Not_yet_implemented "<builtins>")
 
 
+
     let make_definition
             (info: Info.t)
             (_: name)
-            (_: signature)
-            (_: t)
-            (_: context)
+            ((fargs,res_typ): signature)
+            (definition: t)
+            (c: context)
         : context res
         =
+        let module ListM = List.Monadic (Res) in
+        let open Res in
+        ListM.fold_left
+            (fun (name, typ) ->
+                 binder name typ)
+            fargs
+            (Build.make c)
+        >>=
+        make_type res_typ
+        >>=
+        make_typed_term definition
+        >>= fun _ ->
         Error (info, Type_error.Not_yet_implemented "<definitions>")
 end
 

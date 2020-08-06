@@ -181,6 +181,39 @@ struct
 
 
 
+    let sort_of_term (term: Term.typ): Sort.t =
+        match term with
+        | Sort sort ->
+            sort
+        | _ ->
+            assert false (* term is not a sort *)
+
+
+
+    let make_pi
+            (arg_name: string)
+            (arg_idx: int)
+            (arg_typ: Term.typ)
+            (arg_sort: Sort.t)
+            (res_typ: Term.typ)
+            (res_sort: Term.typ)
+            (bc: t)
+        : Term.typ * Term.typ
+        =
+        Term.make_product
+            arg_name
+            true (* is_typed *)
+            (Algo.is_kind arg_typ bc.gh)
+            arg_typ
+            (into_new_binder arg_idx res_typ)
+        ,
+        (Term.Sort
+             (Sort.pi_sort
+                  arg_sort
+                  (sort_of_term res_sort)))
+
+
+
     let push_item
             (requirement: requirement)
             (nargs: int)
@@ -192,15 +225,6 @@ struct
              {requirement; nargs; satisfied = false; term = None}
              ::
              bc.stack}
-
-
-    let sort_of_term (term: Term.typ): Sort.t =
-        match term with
-        | Sort sort ->
-            sort
-        | _ ->
-            assert false (* term is not a sort *)
-
 
 
 
@@ -256,6 +280,19 @@ struct
 
 
 
+    let pop_binder (bc: t): string * int * Term.typ * Sort.t * t =
+        let binder, binders = split_binders bc
+        in
+        Gamma_holes.name_at_level binder.binder_level bc.gh,
+        Gamma_holes.index_of_level binder.binder_level bc.gh,
+        Gamma_holes.type_at_level binder.binder_level bc.gh,
+        binder.sort,
+        {bc with
+         gh = Gamma_holes.pop_bound bc.gh;
+         binders;
+         name_map = binder.name_map_previous}
+
+
 
     let get_final (bc: t): Term.t * Term.typ =
         (* Get the term in the original context. *)
@@ -273,7 +310,6 @@ struct
             term, typ
         | _, _ ->
             assert false (* Term or type still contain some holes. *)
-
 
 
 
@@ -441,6 +477,12 @@ struct
 
 
 
+    let start_typed_term (bc: t): t =
+        let typ, _, _ = get_top bc in
+        push_item (Result_type typ) 0 bc
+
+
+
 
     let start_type: t -> t =
         (* Start the analysis of a type. *)
@@ -550,36 +592,12 @@ struct
            4. Push [all (x:A): R] onto the stack
         *)
         fun bc ->
-        let binder, binders = split_binders bc
-        and res_typ, res_sort, stack = get_top bc
+        let res_typ, res_sort, bc = pop_top bc
         in
-        let arg_typ =
-            Gamma_holes.type_at_level binder.binder_level bc.gh
-        and arg_name =
-            Gamma_holes.name_at_level binder.binder_level bc.gh
-        and arg_idx =
-            Gamma_holes.index_of_level binder.binder_level bc.gh
+        let arg_name, arg_idx, arg_typ, arg_sort, bc = pop_binder bc
         in
-        let kind = Algo.is_kind arg_typ bc.gh in
-        (* MISSING: Check holes in [arg_typ]. As long as binders are fully
-         * typed, there are no holes.
-         *
-         * If bound variable is untyped, check the naming conventions.
-         *)
-        put_term
-            info
-            (Term.make_product
-                 arg_name
-                 true (* is_typed *)
-                 kind
-                 arg_typ
-                 (into_new_binder arg_idx res_typ))
-            (Term.Sort
-                 (Sort.pi_sort
-                      binder.sort
-                      (sort_of_term res_sort)))
-            {gh = Gamma_holes.pop_bound bc.gh;
-             stack;
-             binders;
-             name_map = binder.name_map_previous}
+        let pi_term, pi_type =
+            make_pi arg_name arg_idx arg_typ arg_sort res_typ res_sort bc
+        in
+        put_term info pi_term pi_type bc
 end
