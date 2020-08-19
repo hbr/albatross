@@ -465,35 +465,49 @@ module Pretty (P:PRINTER) =
       M.(state >>= fun st -> return @@ State.relative_position st)
 
 
+    let fill_indent (state: state) (p: P.t): state * P.t =
+        let pos = State.position state
+        and ind = State.current_indent state
+        in
+        if pos = 0 then
+            State.increment_position (ind - pos) state,
+            P.(p <+> fill (ind - pos) ' ')
+        else
+            state, p
+
+
     let out_string (s:string) (start:int) (len:int): t =
       fun st p k ->
       More
         (fun _ ->
-          k
-            ()
-            (State.increment_position len st)
-            P.(p <+> substring s start len))
+            let st, p = fill_indent st p in
+            k
+                ()
+                (State.increment_position len st)
+                P.(p <+> substring s start len))
 
 
     let out_char (c:char): t =
       fun st p k ->
       More
         (fun _ ->
-          k
-            ()
-            (State.increment_position 1 st)
-            P.(p <+> char c))
+            let st, p = fill_indent st p in
+            k
+                ()
+                (State.increment_position 1 st)
+                P.(p <+> char c))
 
 
     let out_fill (n:int) (c:char): t =
       assert (0 <= n);
       fun st p k ->
-      More
-        (fun _ ->
-          k
-            ()
-            (State.increment_position n st)
-            P.(p <+> fill n c))
+          More
+              (fun _ ->
+               let st, p = fill_indent st p in
+               k
+                   ()
+                   (State.increment_position n st)
+                   P.(p <+> fill n c))
 
 
     let out_text (t:Text.t): t =
@@ -727,14 +741,14 @@ module Pretty (P:PRINTER) =
 
     let nest (i:int) (m:t): 't =
       let open M in
-      get_and_update (State.increment_indent i) >>= fun st ->
-      let pos,ind = State.position st, State.current_indent st in
+      get_and_update (State.increment_indent i) >>= fun _ ->
+      (*let pos,ind = State.position st, State.current_indent st in
       let m =
         if pos = 0 (*pos < ind + i*) then
           fill (ind + i - pos) ' ' >>= fun _ -> m
         else
           m
-      in
+      in*)
       m >>= fun a ->
       update (State.increment_indent (-i)) >>= fun _ ->
       return a
@@ -876,8 +890,23 @@ let%test _ =
     (nest_list 4 [string "0123"; cut; string "456"]
      <+> cut <+> string "0123")
     "    0123\n\
-     \    456\n\
+    \    456\n\
      0123"
+
+
+
+let%test _ =
+    test
+        70 true
+        (
+            string "line1"
+            <+> cut
+            <+> nest 4 (string "indented" <+> cut)
+            <+> string "line2"
+        )
+        "line1\n\
+        \    indented\n\
+        \    line2"  (* WRONG: shall not be indented! *)
 
 
 let%test _ =
