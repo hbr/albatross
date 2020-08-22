@@ -13,6 +13,8 @@ module Module_types  = Module_types
 
 module List = List
 
+module Fifo_list = Fifo_list
+
 module Option = Option
 
 module Result = Result
