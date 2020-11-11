@@ -166,17 +166,19 @@ module Buffer =
     let groups (b:t): group list = b.gs
     let empty: t =
       {gs = []; l = 0; o = 0;}
+
     let push (g:group) (b:t): t =
       {gs = g :: b.gs; l = Group.length g + b.l; o = b.o + 1}
+
     let add_text (t:Text.t) (b:t): t =
-      let open Text in
       match b.gs with
       | [] ->
          assert false (* Illegal call *)
       | g :: tl ->
          {b with
            gs = Group.add_text t g :: tl;
-           l  = b.l + length t}
+           l  = b.l + Text.length t}
+
     let add_line (l:Line.t) (b:t): t =
       match b.gs with
       | [] ->
@@ -185,15 +187,17 @@ module Buffer =
          {b with
            gs = Group.add_line l g :: tl;
            l  = b.l + Line.length l}
+
     let open_groups (n:int) (b:t): t =
       assert (0 <= n);
-      let rec ogs n gs =
+      let rec ogs n =
         if n = 0 then
-          gs
+          b.gs
         else
-          Group.empty :: ogs (n-1) gs
+          Group.empty :: ogs (n-1)
       in
-      {b with o = b.o + n; gs = ogs n b.gs}
+      {b with o = b.o + n; gs = ogs n}
+
     let close_groups (n:int) (b:t): t =
       assert (0 <= n);
       assert (n < b.o);
@@ -222,7 +226,7 @@ module State =
         pos: int             (* Position on the current line *)
       }
     type groups = {
-        oe: int;  (* open effecitve groups *)
+        oe: int;  (* open effective groups *)
         oa: int;  (* open active groups *)
         o_r: int; (* open groups to the right of the last open
                      group in buffer *)
