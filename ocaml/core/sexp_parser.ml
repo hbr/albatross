@@ -570,9 +570,9 @@ let%test _ =
 
 
 (* Filling the context *)
-
+(*
 let%test _ =
     let _ = build_context
             "(def identity (A: Any) (x: A): A := x)"
             Welltyped.empty in
-    true
+    true*)

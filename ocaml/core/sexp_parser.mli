@@ -15,6 +15,9 @@
             |   application
             |   function-type
             |   function-abstraction
+            |   pattern-match
+            |   fixpoint
+            |   mutual-fixpoint
 
         application ::=
             (app term term+)
@@ -22,12 +25,22 @@
         function-type ::=
             (all (name: term)+ : term)
 
+        function-abstraction ::=
+            (lambda (name: term)+ . term)
+
 
         atom ::= identifier | operator | deBruijn | literal
 
         name ::=
             | identifier
             | _
+
+        pattern-match ::=
+            (case term term+)    -- elimination function, list of functions
+
+        fixpoint ::=
+            (fix name number (name: term)+ : term . term)
+                -- decr argument, args, result type, def term
    v}
 
 
@@ -50,7 +63,7 @@
             (class string (name: term)* : term constructor* )
 
         constructor ::=
-            (string : constructor-argument* (: term+)? )
+            (string constructor-argument* (: term+)? )
 
         constructor-argument ::=
             (name: ( term* ) term)
@@ -79,12 +92,33 @@
 
         (builtin Int: Any)
 
+        (class false: Proposition)
+
+        (class true: Proposition (trueValid))
+
         (class List (A: Any): Any
             ([])
             (+:
                 (_: () A)
                 (_: () (app List A))
             ))
+
+        (class Natural (): Any
+            (zero)
+            (succ (_: Natural)))
+
+        (def pred (n: Natural): Natural
+            (case
+                (lambda (_: Natural) . Natural)
+                zero
+                (lambda (m: Natural) . m)))
+
+        (def isSucc: (all (_: Natural): Proposition)
+            (case
+                (lambda (_: Natural) . Proposition)
+                (false)
+                (lambda (_: Natural) . true)))
+
     v}
 
  *)

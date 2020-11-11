@@ -26,10 +26,11 @@
     Product
     -------
 
-        Gamma  |- A: sA
-        Gamma, x:A |- R: sR
-        ----------------------------------------
-        Gamma |- (all (x: A). R) : pi_sort(sA,sR)
+        Gamma      |- A: sA
+        Gamma, x:A |- B: sB
+        Gamma      |- pi_sort(sA,sB) <= s
+        -----------------------------------
+        Gamma      |- (all (x: A). B) : s
 
 
         sA              sR              pi_sort(sA,sR)
@@ -39,15 +40,23 @@
         Any(i)          Any(j)          Any(max(i,j))
 
 
-        A and R must be types. If this is satisfied, the product can be built in
-        a typesafe manner.
+        At the start there is on top of the stack an empty term with an optional
+        requirement of its return type. The required type, if present, must be a
+        sort.
 
-        Generating the product term, it is checked, if A is a kind and if x
-        occurs in R.
+        Depending of the required type we push a new item onto the stack. If the
+        required type is a proposition, then the required type of the argument
+        type is Any. If the required type of the whole product is [Any(i)], then
+        the required type of the argument type is [Any(i)].
 
-        First build A with the requirement of being a type. Then make a new
-        binder (x:A). The build R with the requirement of being a type. Finally
-        build all (x:A): R.
+        We build the argument type and pop it and push is as a bound variable.
+
+        Then we push a new item for the result type with the same required type
+        as the requirement of the product term onto the stack and build the
+        result type.
+
+        Finally we pop the result type and the binder and put the product term
+        onto the top of the stack.
 
 
     Application
@@ -70,7 +79,19 @@
 
 
 
+    Lambda
+    ------
+
+        Gamma      |- (all (x: A): B) : s
+        Gamma, x:A |- e: B
+        --------------------------------------------
+        Gamma      |- (\ (x: A) := e): all (x: A): B
+
 *)
+
+
+
+
 
 
 open Fmlib
@@ -91,7 +112,7 @@ struct
     type requirement =
         | No_requirement
         | Some_type
-        | Result_type of Term.typ
+        | Result_type of Term.typ * int
 
 
 
@@ -154,6 +175,11 @@ struct
         Term_printer.string_of_term
             term
             (Gamma_holes.context bc.gh)
+
+
+    let term_to_context (term: Term.t) (n: int) (bc: t): Term.t =
+        assert (n <= count bc);
+        Term.up (count bc - n) term
 
 
     let into_new_binder (idx: int) (term: Term.t): Term.t
@@ -265,10 +291,8 @@ struct
             assert false (* Cannot happen. Term construction not yet completed.
                          *)
         | Some (_, term, typ, n) ->
-            assert (n <= count bc);
-            let delta = count bc - n in
-            Term.up delta term,
-            Term.up delta typ,
+            term_to_context term n bc,
+            term_to_context typ n bc,
             stack
 
 
@@ -362,8 +386,10 @@ struct
                 else
                     Error (info, Type_error.Not_a_type)
 
-            | Result_type req_typ ->
+            | Result_type (req_typ, n) ->
                 (
+                    let req_typ = term_to_context req_typ n bc
+                    in
                     match Uni.unify typ req_typ true bc.gh with
                     | None ->
                         Error (
@@ -377,12 +403,13 @@ struct
                         put {bc with gh}
                 )
         else
-            let typ_n = Algo.key_normal typ bc.gh in
+            let typ_n = Algo.key_normal typ bc.gh
+            and cnt = count bc in
             match typ_n with
             | Term.Pi (arg_tp, _, _) ->
                 Ok (
                     set_term info term typ_n bc
-                    |> push_item (Result_type arg_tp) 0
+                    |> push_item (Result_type (arg_tp, cnt)) 0
                 )
             | _ ->
                 Error (info,
@@ -479,7 +506,7 @@ struct
 
     let start_typed_term (bc: t): t =
         let typ, _, _ = get_top bc in
-        push_item (Result_type typ) 0 bc
+        push_item (Result_type (typ, count bc)) 0 bc
 
 
 
@@ -576,21 +603,55 @@ struct
             }
 
 
+    let start_pi (info: Info.t): t -> t res =
+        fun bc ->
+        let item, _ = split_stack bc
+        and cnt = count bc in
+        assert (item.term = None);
+        match item.requirement with
+        | No_requirement | Some_type ->
+            Ok (push_item Some_type 0 bc)
+
+        | Result_type (Term.(Sort sort), _) ->
+            (
+                match sort with
+                | Sort.Proposition ->
+                    Ok (push_item
+                            (Result_type (Term.Sort (Sort.Any 1), cnt))
+                            0
+                            bc)
+                | _ ->
+                    Ok (push_item
+                            (Result_type (Term.Sort sort, cnt))
+                            0
+                            bc)
+            )
+        | Result_type (req_typ,n) ->
+            Error (info,
+                   Type_error.No_type_allowed (
+                       term_to_context req_typ n bc,
+                       Gamma_holes.context bc.gh))
+
+
+
+    let start_pi_result: t -> t res =
+        fun bc ->
+        let item, _ = split_stack bc in
+        assert (item.term = None);
+        match item.requirement with
+        | No_requirement | Some_type ->
+            Ok (push_item Some_type 0 bc)
+
+        | Result_type (req_typ, n) ->
+            Ok (push_item
+                    (Result_type (req_typ, n))
+                    0
+                    bc)
+
+
+
+
     let end_pi (info: Info.t): t -> t res =
-        (* Make [all (x:A): R] and put it on top of the stack.
-
-           - [R] is on top of the stack.
-
-           - [(x:A)] is the most recent binder.
-
-           1. Get [x:A]
-
-           2. Pop [R] and lift it into the new binder
-
-           3. Pop the most recent binder
-
-           4. Push [all (x:A): R] onto the stack
-        *)
         fun bc ->
         let res_typ, res_sort, bc = pop_top bc
         in

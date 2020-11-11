@@ -10,7 +10,9 @@ type t =
   | Naming_type_variable
   | Name_not_found of string
   | Wrong_type of Term.typ * Term.typ * Gamma.t
+  | No_type_allowed of Term.typ * Gamma.t
   | Not_a_function of Term.typ * Gamma.t
+  | Pi_not_a_function
   | Not_yet_implemented of string
 
 
@@ -57,6 +59,14 @@ struct
             <+> nest 4 (cut <+> Term_print.print act_typ gamma)
             <+> cut <+> cut
 
+        | No_type_allowed (req_typ, gamma) ->
+            wrap_words "I was expecting a term which has the type"
+            <+> cut
+            <+> nest 4 (cut <+> Term_print.print req_typ gamma)
+            <+> cut <+> cut
+            <+> wrap_words "Therefore a type is not allowed here"
+            <+> cut <+> cut
+
         | Not_a_function (typ, gamma) ->
             wrap_words
                 "I was expecting a function, because there are \
@@ -65,6 +75,12 @@ struct
             <+> cut
             <+> nest 4 (cut <+> Term_print.print typ gamma)
             <+> cut <+> cut
+
+        | Pi_not_a_function ->
+            wrap_words
+                "I was expecting a function, because there are \
+                more arguments to come. But this term is not a function."
+            <+> cut
 
         | Not_yet_implemented what ->
             string (what ^ " is not yet implemented") <+> cut
