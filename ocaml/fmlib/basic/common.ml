@@ -134,7 +134,69 @@ module String =
     let reverse (s: string): string =
         let len = length s in
         init len (fun i -> s.[len - 1 - i])
+
+
+    module To_readable =
+    struct
+        type t = int * string
+
+        let has_more ((i,s): t): bool =
+            i < String.length s
+
+        let peek ((i,s): t): char =
+            assert (has_more (i,s));
+            s.[i]
+
+        let advance ((i,s)): t =
+            assert (has_more (i,s));
+            (i + 1, s)
+
+        let make (s: string): t =
+            (0,s)
+    end
+
+    module From_readable (R: Module_types.READABLE) =
+    struct
+        let make_with_size (increment: int) (r: R.t): t =
+            let buffer = ref (Bytes.create increment) in
+            let len = ref 0
+            and capacity = ref increment
+            in
+            let make_room () =
+                if len = capacity then
+                    let bnew = Bytes.create (!capacity + increment) in
+                    begin
+                        Bytes.blit !buffer 0 bnew 0 !len;
+                        buffer := bnew;
+                        capacity := !capacity + increment
+                    end
+            in
+            let push c =
+                make_room ();
+                Bytes.set !buffer !len c;
+                len := !len + 1;
+            in
+            let rec recurse r =
+                if R.has_more r then
+                    begin
+                        push (R.peek r);
+                        recurse (R.advance r)
+                    end
+                else
+                    Bytes.sub_string !buffer 0 !len
+            in
+            recurse r
+
+        let make (r: R.t): t =
+            make_with_size 100 r
+    end
   end
+
+let%test _ =
+    let str = "12345678901234567890123456789012" in
+    let module From = String.From_readable (String.To_readable) in
+    str = From.make (String.To_readable.make str)
+
 
 
 module String_set = Set.Make(String)

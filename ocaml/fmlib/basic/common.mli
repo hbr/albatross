@@ -86,6 +86,18 @@ sig
   val split_on_char: char -> string -> string list
   val make: int -> char -> t
   val init: int -> (int -> char) -> t
+
+    module To_readable:
+    sig
+        include Module_types.READABLE
+        val make: string -> t
+    end
+
+    module From_readable (R: Module_types.READABLE):
+    sig
+        val make_with_size: int -> R.t -> t
+        val make: R.t -> t
+    end
 end
 
 
