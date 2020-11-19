@@ -139,39 +139,22 @@ let update (f: State.t -> State.t): unit m =
 
 
 
+
+
+
+
 (* Generate Output
  * ===============
  *)
 
 
-let print_fill (n: int) (c: char): unit m =
-    assert (0 < n);
+let print_text (text: Text.t): unit m =
     fun s k ->
-        More (
-            Text.fill n c,
-            State.advance_position n s,
-            k ())
-
-
-let print_substring (str: string) (start: int) (len: int): unit m =
-    assert (0 <= start);
-    assert (0 < len);
-    assert (start + len <= String.length str);
-    fun s k ->
-        More (
-            Text.substring str start len,
-            State.advance_position len s,
-            k ()
-        )
-
-
-let print_char (c: char): unit m =
-    fun s k ->
-        More (
-            Text.char c,
-            State.advance_position 1 s,
-            k ()
-        )
+    More (
+        text,
+        State.advance_position (Text.length text) s,
+        k ()
+    )
 
 
 let print_indent: unit m =
@@ -180,7 +163,7 @@ let print_indent: unit m =
     if n = 0 then
         return ()
     else
-        print_fill n ' '
+        print_text (Text.fill n ' ')
 
 
 let print_line: unit m =
@@ -281,9 +264,75 @@ let group (doc: doc): doc =
 
 
 
-(* Specific Combinators
- * ====================
+
+
+(* Flushing the Buffer
+ * ===================
+
+    1. Buffer fits and active region ended:
+
+        Flush the complete buffer flattened. The outermost buffered group has
+        been ended and fits completely. Therefore all inner groups fit
+        completely i.e. the whole buffer can be flushed as flattened.
+
+
+    2. The buffer does not fit:
+
+        The outermost group in the buffer must be effective. The inner groups
+        can still be flattened or effective.
+
+        All completed groups within the outermost group fit. Otherwise they
+        wouldn't had been completed. Therefore the completed groups in the
+        outermost groups can be printed as flattened.
+
+        After the outermost buffered group printed as effective, the remaining
+        buffer might still be too large. I.e. the process of printing the
+        outermost buffered group as effective must be continued until the buffer
+        fits (or is empty).
+
  *)
+
+
+
+let flush_one_effective (): bool m =
+    get >>= fun s ->
+    if State.buffer_fits s then
+        return true
+    else
+        assert false
+
+
+let rec flush_effective (): unit m =
+    flush_one_effective ()
+    >>=
+    fun ok ->
+    if ok then
+        return ()
+    else
+        flush_effective ()
+
+
+
+
+
+
+
+(* Elementary Combinators
+ * ======================
+ *)
+
+
+let put_text (text: Text.t): doc =
+    get >>= fun s ->
+    if State.direct_out s then
+        print_indent <+> print_text text
+    else
+        (* We are buffering! *)
+        let s = State.push_text text s in
+        if State.buffer_fits s then
+            put s
+        else
+            assert false
 
 
 let substring (str: string) (start: int) (len: int): doc =
@@ -292,11 +341,7 @@ let substring (str: string) (start: int) (len: int): doc =
     if len = 0 then
         empty
     else
-        get >>= fun s ->
-        if State.direct_out s then
-            print_indent <+> print_substring str start len
-        else
-            assert false
+        put_text (Text.substring str start len)
 
 
 let string (str: string): doc =
@@ -307,27 +352,38 @@ let fill (n: int) (c: char): doc =
     if n = 0 then
         empty
     else
-        get >>= fun s ->
-        if State.direct_out s then
-            print_indent <+> print_fill n c
-        else
-            assert false
+        put_text (Text.fill n c)
 
 
 let char (c: char): doc =
-    get >>= fun s ->
-    if State.direct_out s then
-        print_indent <+> print_char c
-    else
-        assert false
+    put_text (Text.char c)
 
 
-let line (_: string): doc =
+
+let line (str: string): doc =
     get >>= fun s ->
     if State.line_direct_out s then
         print_line
+    else if State.within_active s then
+        let s = State.push_break str s in
+        if State.buffer_fits s then
+            put s
+        else
+            assert false (* flush until fits *)
     else
+        (* The break hint ends the active region. Print the buffer
+           flattened and try again. *)
         assert false
+
+
+
+
+
+
+
+(* Convenience Combinators
+ * =======================
+ *)
 
 
 let cut: doc =

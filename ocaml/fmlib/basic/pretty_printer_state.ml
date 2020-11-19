@@ -98,6 +98,10 @@ let line_indent (s: t): int =
 
 
 let advance_position (n: int) (s: t): t =
+    assert ( s.position <> 0
+             ||
+             s.line_indent <= n);
+    (* Positions between 0 and line_indent are illegal. *)
     {s with position = s.position + n}
 
 
@@ -105,42 +109,83 @@ let newline (s: t): t =
     {s with position = 0; line_indent = s.next_indent;}
 
 
-let fits (_: int) (s: t): bool =
+
+let fits (n: int) (s: t): bool =
+    (* Is it possible to put [n] more characters on the current line without
+     * violating the line width and the ribbon size? *)
     if s.position = 0 then
-        assert false
+        n <= s.ribbon
+        &&
+        s.line_indent + n <= s.width
     else
-        assert false
-
-
-
-
-(* Buffer
- * =====
-
-   Grammar
-
-    chunk ::= Break Text* group*
-    group ::= group* chunk*
-
-
- *)
+        begin
+            assert (s.line_indent <= s.position);
+            s.position - s.line_indent + n <= s.ribbon
+            &&
+            s.position + n <= s.width
+        end
 
 
 
 
 
-(* Groups
- * ======
 
-   There is a time lag between the opening and closing of a group by the user
-   and the opening and closing of groups in the buffer.
 
-   A group in the buffer is opened at the first break hint in that group. All
-   text before the first break hint belongs is placed before the group.
+(* Groups and Buffering
+ * ====================
 
-   A group in the buffer is closed at the first break hint after the group has
-   been closed by the user. All text before the first break hint after the user
-   closing the group still belongs to that group.
+
+    There is a time lag between the opening and closing of a group by the user
+    and the opening and closing of groups in the buffer.
+
+    A group in the buffer is opened at the first break hint in that group. All
+    text before the first break hint belongs is placed before the group.
+
+    A group in the buffer is closed at the first break hint after the group has
+    been closed by the user. All text before the first break hint after the user
+    closing the group still belongs to that group.
+
+
+    Grammar of the buffer content:
+
+        chunk ::= Break Text* group*
+        group ::= group* chunk*
+
+
+    Start of buffering:
+
+        There are open active groups and the first break hint with one of the
+        active groups arrive.
+
+        We have to open all active groups in the buffer. All outer active groups
+        are empty, only the innermost has the break hint and nothing else.
+
+   Text during buffering:
+
+        Is always appended to the last chunk of the last opened group.
+
+   Break hint during buffering within open active groups:
+
+        a) More open active groups than groups in the buffer:
+
+            Append new groups in the buffer and put a chunk with the break hint
+            to the last group in the buffer.
+
+        b) The same number of active groups as groups in the buffer:
+
+            Add a new chunk to the last group in the buffer
+
+        c) Fewer active groups (but still some) than groups in the buffer:
+
+            Close the corresponging groups in the buffer and append them to the
+            last chunk of the parent group or to the completed groups of the
+            parent group. Add a new chunk to the last group in the buffer.
+
+    Break hint during buffering outside active groups:
+
+        Buffer has to be flushed as flattened and then it has to be checked
+        whether the break hint starts buffering again.
+
 
  *)
 
@@ -183,9 +228,34 @@ let line_direct_out (s: t): bool =
     s.active_groups = 0
 
 
+let within_active (s: t): bool =
+    0 < s.active_groups
+
 
 let buffer_fits (s: t): bool =
     fits (Buffer.length s.buffer) s
+
+
+
+let push_text (_: Text.t) (s: t): t =
+    assert (is_buffering s);
+    assert false
+
+
+let push_break (_: string) (s: t): t =
+    assert (within_active s);
+    let oa = s.active_groups
+    and nbuf = buffered_groups s
+    in
+    if nbuf < oa then
+        assert false
+    else if nbuf = oa then
+        assert false
+    else
+        assert false
+
+
+
 
 
 
