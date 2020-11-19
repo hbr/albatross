@@ -139,27 +139,25 @@ let update (f: State.t -> State.t): unit m =
 
 
 
-(* Helper Functions
- * ================
+(* Generate Output
+ * ===============
  *)
 
 
-let fill_aux (n: int) (c: char): unit m =
+let print_fill (n: int) (c: char): unit m =
     assert (0 < n);
     fun s k ->
-        assert (State.direct_out s);
         More (
             Text.fill n c,
             State.advance_position n s,
             k ())
 
 
-let substring_aux (str: string) (start: int) (len: int): unit m =
+let print_substring (str: string) (start: int) (len: int): unit m =
     assert (0 <= start);
     assert (0 < len);
     assert (start + len <= String.length str);
     fun s k ->
-    assert (State.direct_out s);
         More (
             Text.substring str start len,
             State.advance_position len s,
@@ -167,9 +165,8 @@ let substring_aux (str: string) (start: int) (len: int): unit m =
         )
 
 
-let char_aux (c: char): unit m =
+let print_char (c: char): unit m =
     fun s k ->
-        assert (State.direct_out s);
         More (
             Text.char c,
             State.advance_position 1 s,
@@ -177,18 +174,17 @@ let char_aux (c: char): unit m =
         )
 
 
-let do_indent: unit m =
+let print_indent: unit m =
     get >>= fun s ->
     let n = State.line_indent s in
     if n = 0 then
         return ()
     else
-        fill_aux n ' '
+        print_fill n ' '
 
 
-let line_aux: unit m =
+let print_line: unit m =
     fun s k ->
-    assert (State.line_direct_out s);
     More (
         Text.char '\n',
         State.newline s,
@@ -298,7 +294,7 @@ let substring (str: string) (start: int) (len: int): doc =
     else
         get >>= fun s ->
         if State.direct_out s then
-            do_indent <+> substring_aux str start len
+            print_indent <+> print_substring str start len
         else
             assert false
 
@@ -313,7 +309,7 @@ let fill (n: int) (c: char): doc =
     else
         get >>= fun s ->
         if State.direct_out s then
-            do_indent <+> fill_aux n c
+            print_indent <+> print_fill n c
         else
             assert false
 
@@ -321,7 +317,7 @@ let fill (n: int) (c: char): doc =
 let char (c: char): doc =
     get >>= fun s ->
     if State.direct_out s then
-        do_indent <+> char_aux c
+        print_indent <+> print_char c
     else
         assert false
 
@@ -329,7 +325,7 @@ let char (c: char): doc =
 let line (_: string): doc =
     get >>= fun s ->
     if State.line_direct_out s then
-        line_aux
+        print_line
     else
         assert false
 
