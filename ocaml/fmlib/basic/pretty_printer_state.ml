@@ -119,6 +119,10 @@ struct
             assert false (* Illegal call: Before text can be pushed, at least a
                             line break has to be pushed, i.e. the buffer cannot
                             be empty. *)
+
+
+    let reverse (b: t): t =
+        {b with groups = List.rev b.groups}
 end
 
 
@@ -332,6 +336,31 @@ let buffer_fits (s: t): bool =
 
 
 
+let push_text (_: Text.t) (s: t): t =
+    assert (is_buffering s);
+    assert false
+
+
+
+let push_break (_: string) (s: t): t =
+    assert (within_active s);
+    let oa = s.active_groups
+    and nbuf = buffered_groups s
+    in
+    if nbuf < oa then
+        assert false
+    else if nbuf = oa then
+        assert false
+    else
+        assert false
+
+
+let pull_buffer (s: t): Buffer.t * t =
+    Buffer.reverse s.buffer,
+    {s with buffer = Buffer.empty}
+
+
+
 let enter_group (s: t): t =
     if is_buffering s then
         {s with right_groups = s.right_groups + 1}
@@ -349,25 +378,6 @@ let leave_group (s: t): t =
             assert (0 < s.effective_groups);
             {s with effective_groups = s.effective_groups - 1}
         end
-
-
-
-let push_text (_: Text.t) (s: t): t =
-    assert (is_buffering s);
-    assert false
-
-
-let push_break (_: string) (s: t): t =
-    assert (within_active s);
-    let oa = s.active_groups
-    and nbuf = buffered_groups s
-    in
-    if nbuf < oa then
-        assert false
-    else if nbuf = oa then
-        assert false
-    else
-        assert false
 
 
 
@@ -390,7 +400,7 @@ let increment_indent (n: int) (s: t): t =
 
         line_indent =
             if s.position = 0 then
-                (* If nothing has been printed to the current line, then the
+                (* Nothing has been printed to the current line. The
                  * [line_indent] has to be updated immediately. *)
                 new_indent
             else
@@ -399,7 +409,7 @@ let increment_indent (n: int) (s: t): t =
         next_indent =
             if direct_out s then
                 (* In direct output mode the new indentation must become
-                 * immediately effective for the next line *)
+                 * effective for the next line *)
                 new_indent
             else
                 s.next_indent;
