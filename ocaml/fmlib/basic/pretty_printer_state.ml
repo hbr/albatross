@@ -57,6 +57,22 @@ struct
                     group
                     chunk.chunk_groups;
         }
+
+
+    let break_text (chunk: t): string =
+        chunk.break_text
+
+
+    let indent (chunk: t): int =
+        chunk.indent
+
+
+    let texts (chunk: t): Text.t Deque.t =
+        chunk.texts
+
+
+    let groups (chunk: t): group Deque.t =
+        chunk.chunk_groups
 end
 
 
@@ -77,7 +93,20 @@ struct
             glength =
                 group.glength + Text.length text;
         }
+
+
+    let length (group: t): int =
+        group.glength
+
+
+    let complete_groups (group: t): t Deque.t =
+        group.complete_groups
+
+
+    let chunks (group: t): Chunk.t Deque.t =
+        group.chunks
 end
+
 
 
 module Buffer =
@@ -123,6 +152,23 @@ struct
 
     let reverse (b: t): t =
         {b with groups = List.rev b.groups}
+
+    let groups (b: t): Group.t list =
+        b.groups
+
+    let pop (b: t): (Group.t * t) option =
+        match b.groups with
+        | [] ->
+            None
+        | g :: groups ->
+            let len = Group.length g in
+            assert (len <= b.length);
+            Some (
+                g,
+                {ngroups = b.ngroups - 1;
+                 length  = b.length - len;
+                 groups }
+            )
 end
 
 
@@ -186,6 +232,13 @@ let advance_position (n: int) (s: t): t =
 
 let newline (s: t): t =
     {s with position = 0; line_indent = s.next_indent;}
+
+
+let newline_with_indent (indent: int) (s: t): t =
+    {s with
+     position = 0;
+     line_indent = indent;
+     next_indent = indent}
 
 
 
@@ -358,6 +411,11 @@ let push_break (_: string) (s: t): t =
 let pull_buffer (s: t): Buffer.t * t =
     Buffer.reverse s.buffer,
     {s with buffer = Buffer.empty}
+
+
+let push_buffer (_: Buffer.t) (s: t): t =
+    assert (direct_out s);
+    assert false
 
 
 

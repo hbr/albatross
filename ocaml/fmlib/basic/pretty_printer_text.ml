@@ -12,6 +12,12 @@ let substring (str: string) (start: int) (len: int): t =
     String (str, start, len)
 
 
+let string (str: string): t =
+    let len = String.length str in
+    assert (0 < len);
+    substring str 0 len
+
+
 let fill (n: int) (c: char): t =
     assert (0 < n);
     Fill (n, c)

@@ -28,8 +28,11 @@ end
 
 
 
-module Text  = Pretty_printer_text
-module State = Pretty_printer_state
+module Text   = Pretty_printer_text
+module State  = Pretty_printer_state
+module Buffer = State.Buffer
+module Group  = State.Group
+module Chunk  = State.Chunk
 
 
 
@@ -219,6 +222,15 @@ let print_line (): unit m =
     )
 
 
+let print_line_with_indent (indent: int) (): unit m =
+    fun s k ->
+    More (
+        Text.char '\n',
+        State.newline_with_indent indent s,
+        k ()
+    )
+
+
 
 
 
@@ -253,10 +265,99 @@ let print_line (): unit m =
  *)
 
 
+let rec flush_deque
+        (f: 'a -> unit -> unit m)
+        (deque: 'a Deque.t)
+        ()
+    : unit m
+    =
+    match Deque.pop_front deque with
+    | None ->
+        return ()
+    | Some (e, deque) ->
+        f e () >>= flush_deque f deque
+
+
+
+let rec flush_flatten_group (g: Group.t) (): unit m =
+    flush_deque
+        flush_flatten_group
+        (Group.complete_groups g)
+        ()
+    >>=
+    flush_deque
+        flush_flatten_chunk
+        (Group.chunks g)
+
+
+and flush_flatten_chunk (chunk: Chunk.t) (): unit m =
+    print_text
+        (Text.string (Chunk.break_text chunk))
+        ()
+    >>=
+    flush_deque
+        print_text
+        (Chunk.texts chunk)
+    >>=
+    flush_deque
+        flush_flatten_group
+        (Chunk.groups chunk)
+
+
 
 let flush_flatten (): unit m =
-    fun _ -> assert false
+    let rec flush buffer () =
+        match Buffer.pop buffer with
+        | None ->
+            return ()
+        | Some (group, buffer) ->
+            flush_flatten_group group () >>= flush buffer
+    in
+    extract
+        State.pull_buffer
+    >>=
+    fun buffer ->
+    flush buffer ()
 
+
+
+
+
+
+
+let rec flush_effective_group (g: Group.t) (): unit m =
+    (* All break hints belonging directly to the group are effective line
+     * breaks. *)
+    flush_deque
+        flush_group
+        (Group.complete_groups g)
+        ()
+    >>=
+    flush_deque
+        flush_flatten_chunk
+        (Group.chunks g)
+
+
+and flush_effective_chunk (chunk: Chunk.t) (): unit m =
+    (* The break hint starting the chunk is effective. *)
+    print_line_with_indent
+        (Chunk.indent chunk)
+        ()
+    >>=
+    flush_deque
+        print_text
+        (Chunk.texts chunk)
+    >>=
+    flush_deque
+        flush_group
+        (Chunk.groups chunk)
+
+
+and flush_group (g: Group.t) (): unit m =
+     choice
+         (State.fits (Group.length g))
+         (flush_flatten_group g)
+         (flush_effective_group g)
 
 
 
@@ -264,8 +365,22 @@ let flush_effective (): unit m =
     extract
         State.pull_buffer
     >>=
-    fun _ ->
-    assert false
+    fun buffer ->
+    let rec flush buffer () =
+        choice
+            (State.fits (Buffer.length buffer))
+            (fun () -> update (State.push_buffer buffer))
+            (fun () ->
+             match Buffer.pop buffer with
+             | None ->
+                 return ()
+             | Some (group, buffer) ->
+                 choice
+                     (State.fits (Group.length group))
+                     (flush_flatten_group group >=> flush buffer)
+                     (flush_effective_group group >=> flush buffer))
+    in
+    flush buffer ()
 
 
 
@@ -274,8 +389,8 @@ let flush_effective (): unit m =
 
 
 
-(* Print or Buffer Text and Break Hints
- * ====================================
+(* Print or Push Text and Break Hints
+ * ==================================
  *)
 
 
@@ -299,7 +414,8 @@ let put_text (text: Text.t): unit m =
 let rec put_line (str: string) (): unit m =
     alternatives
         [
-            State.line_direct_out, print_line;
+            State.line_direct_out,
+            print_line;
 
             State.within_active,
             (update_and_flush (State.push_break str))
@@ -363,22 +479,8 @@ let char (c: char): doc =
     put_text (Text.char c)
 
 
-let rec line (str: string): doc =
-    alternatives
-        [
-            State.line_direct_out, print_line;
-
-            State.within_active,
-            (fun () -> update (State.push_break str))
-            >=>
-            fun _ ->
-            choice
-                State.buffer_fits
-                return
-                flush_effective
-        ]
-        (flush_flatten >=> fun () -> line str)
-
+let line (str: string): doc =
+    put_line str ()
 
 
 
