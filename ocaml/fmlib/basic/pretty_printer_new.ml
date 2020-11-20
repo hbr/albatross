@@ -166,6 +166,23 @@ let choice
         m2 () s k
 
 
+let alternatives
+        (lst: ((State.t -> bool) * (unit -> 'a m)) list)
+        (otherwise: unit -> 'a m)
+    : 'a m
+    =
+    let rec choose lst =
+        fun s k ->
+        match lst with
+        | [] ->
+            otherwise () s k
+        | (p, m0) :: tail ->
+            if p s then
+                m0 () s k
+            else
+                choose tail s k
+    in
+    choose lst
 
 
 
@@ -257,26 +274,37 @@ let flush_effective (): unit m =
 
 
 
-
-(* Print or Buffer Text
- * ====================
+(* Print or Buffer Text and Break Hints
+ * ====================================
  *)
 
+
+let update_and_flush (f: State.t -> State.t) (): unit m =
+    update f
+    >>=
+    fun _ ->
+    choice
+        State.buffer_fits
+        return
+        flush_effective
 
 
 let put_text (text: Text.t): unit m =
     choice
         State.direct_out
         (print_indent >=> print_text text)
-        (
-            (fun () -> update (State.push_text text))
-            >=>
-            fun () ->
-            choice
-                State.buffer_fits
-                return
-                flush_effective
-         )
+        (update_and_flush (State.push_text text))
+
+
+let rec put_line (str: string) (): unit m =
+    alternatives
+        [
+            State.line_direct_out, print_line;
+
+            State.within_active,
+            (update_and_flush (State.push_break str))
+        ]
+        (flush_flatten >=> put_line str)
 
 
 
@@ -336,27 +364,20 @@ let char (c: char): doc =
 
 
 let rec line (str: string): doc =
-    choice
-        State.line_direct_out
-        print_line
-        (
-            fun () ->
-            choice
-                State.within_active
-                (
-                    (fun () -> update (State.push_break str))
-                    >=>
-                    fun _ ->
-                    choice
-                        State.buffer_fits
-                        return
-                        flush_effective
-                )
-                (
-                    flush_flatten >=> fun () -> line str
-                )
-        )
+    alternatives
+        [
+            State.line_direct_out, print_line;
 
+            State.within_active,
+            (fun () -> update (State.push_break str))
+            >=>
+            fun _ ->
+            choice
+                State.buffer_fits
+                return
+                flush_effective
+        ]
+        (flush_flatten >=> fun () -> line str)
 
 
 
