@@ -123,6 +123,14 @@ let (>>=) (m: 'a m) (f: 'a -> 'b m): 'b m =
         (fun a s -> f a s k)
 
 
+let (>=>) (f: 'a -> 'b m) (g: 'b -> 'c m): 'a -> 'c m =
+    fun a s k ->
+    f
+        a
+        s
+        (fun b s -> g b s k)
+
+
 let get: State.t m =
     fun s k ->
     k s s
@@ -139,6 +147,25 @@ let update (f: State.t -> State.t): unit m =
 
 
 
+let extract (f: State.t -> 'a * State.t): 'a m =
+    fun s k ->
+    let a, s = f s in
+    k a s
+
+
+let choice
+        (p: State.t -> bool)
+        (m1: unit -> 'a m)
+        (m2: unit -> 'a m)
+    : 'a m
+    =
+    fun s k ->
+    if p s then
+        m1 () s k
+    else
+        m2 () s k
+
+
 
 
 
@@ -148,7 +175,7 @@ let update (f: State.t -> State.t): unit m =
  *)
 
 
-let print_text (text: Text.t): unit m =
+let print_text (text: Text.t) (): unit m =
     fun s k ->
     More (
         text,
@@ -157,16 +184,16 @@ let print_text (text: Text.t): unit m =
     )
 
 
-let print_indent: unit m =
+let print_indent (): unit m =
     get >>= fun s ->
     let n = State.line_indent s in
     if n = 0 then
         return ()
     else
-        print_text (Text.fill n ' ')
+        print_text (Text.fill n ' ') ()
 
 
-let print_line: unit m =
+let print_line (): unit m =
     fun s k ->
     More (
         Text.char '\n',
@@ -182,10 +209,85 @@ let print_line: unit m =
 
 
 
+(* Flushing the Buffer
+ * ===================
+
+    1. Buffer fits and active region ended:
+
+        Flush the complete buffer flattened. The outermost buffered group has
+        been ended and fits completely. Therefore all inner groups fit
+        completely i.e. the whole buffer can be flushed as flattened.
+
+
+    2. The buffer does not fit:
+
+        The outermost group in the buffer must be effective. The inner groups
+        can still be flattened or effective.
+
+        All completed groups within the outermost group fit. Otherwise they
+        wouldn't had been completed. Therefore the completed groups in the
+        outermost groups can be printed as flattened.
+
+        After the outermost buffered group printed as effective, the remaining
+        buffer might still be too large. I.e. the process of printing the
+        outermost buffered group as effective must be continued until the buffer
+        fits (or is empty).
+
+ *)
+
+
+
+let flush_flatten (): unit m =
+    fun _ -> assert false
+
+
+
+
+let flush_effective (): unit m =
+    extract
+        State.pull_buffer
+    >>=
+    fun _ ->
+    assert false
+
+
+
+
+
+
+
+
+
+(* Print or Buffer Text
+ * ====================
+ *)
+
+
+
+let put_text (text: Text.t): unit m =
+    choice
+        State.direct_out
+        (print_indent >=> print_text text)
+        (
+            (fun () -> update (State.push_text text))
+            >=>
+            fun () ->
+            choice
+                State.buffer_fits
+                return
+                flush_effective
+         )
+
+
+
+
+
+
+
 (* Document
  * ========
  *
- * The user is able to create and combine documents (see combinators below).
+ * The user is able to create and combine documents.
  *
  * At the end the user can layout a document i.e. convert it to a readable
  * structure.
@@ -204,6 +306,63 @@ let layout (width: int) (ribbon: int) (doc: doc): t =
 
 
 
+let empty: doc =
+    return ()
+
+
+
+let substring (str: string) (start: int) (len: int): doc =
+    assert (0 <= start);
+    assert (start + len <= String.length str);
+    if len = 0 then
+        empty
+    else
+        put_text (Text.substring str start len)
+
+
+let string (str: string): doc =
+    substring str 0 (String.length str)
+
+
+let fill (n: int) (c: char): doc =
+    if n = 0 then
+        empty
+    else
+        put_text (Text.fill n c)
+
+
+let char (c: char): doc =
+    put_text (Text.char c)
+
+
+let rec line (str: string): doc =
+    choice
+        State.line_direct_out
+        print_line
+        (
+            fun () ->
+            choice
+                State.within_active
+                (
+                    (fun () -> update (State.push_break str))
+                    >=>
+                    fun _ ->
+                    choice
+                        State.buffer_fits
+                        return
+                        flush_effective
+                )
+                (
+                    flush_flatten >=> fun () -> line str
+                )
+        )
+
+
+
+
+
+
+
 
 
 
@@ -213,11 +372,6 @@ let layout (width: int) (ribbon: int) (doc: doc): t =
 (* Generic combinators
  * ===================
  *)
-
-
-let empty: doc =
-    return ()
-
 
 
 let (<+>) (doc1: doc) (doc2: doc): doc =
@@ -259,136 +413,6 @@ let group (doc: doc): doc =
     doc
     <+>
     update State.leave_group
-
-
-
-
-
-
-
-(* Flushing the Buffer
- * ===================
-
-    1. Buffer fits and active region ended:
-
-        Flush the complete buffer flattened. The outermost buffered group has
-        been ended and fits completely. Therefore all inner groups fit
-        completely i.e. the whole buffer can be flushed as flattened.
-
-
-    2. The buffer does not fit:
-
-        The outermost group in the buffer must be effective. The inner groups
-        can still be flattened or effective.
-
-        All completed groups within the outermost group fit. Otherwise they
-        wouldn't had been completed. Therefore the completed groups in the
-        outermost groups can be printed as flattened.
-
-        After the outermost buffered group printed as effective, the remaining
-        buffer might still be too large. I.e. the process of printing the
-        outermost buffered group as effective must be continued until the buffer
-        fits (or is empty).
-
- *)
-
-
-
-let flush_flatten (): unit m =
-    assert false
-
-
-let flush_one_effective (): bool m =
-    get >>= fun s ->
-    if State.buffer_fits s then
-        return true
-    else
-        assert false
-
-
-let rec flush_effective (): unit m =
-    flush_one_effective ()
-    >>=
-    fun ok ->
-    if ok then
-        return ()
-    else
-        flush_effective ()
-
-
-
-
-
-
-
-(* Elementary Combinators
- * ======================
- *)
-
-
-let put_text (text: Text.t): doc =
-    get >>= fun s ->
-    if State.direct_out s then
-        print_indent <+> print_text text
-    else
-        (* We are buffering! *)
-        let s = State.push_text text s in
-        if State.buffer_fits s then
-            put s
-        else
-            assert false
-
-
-
-let rec line (str: string): doc =
-    get
-    >>=
-    fun s ->
-    if State.line_direct_out s then
-        print_line
-
-    else if State.within_active s then
-        let s = State.push_break str s in
-        if State.buffer_fits s then
-            put s
-        else
-            put s
-            >>=
-            flush_effective
-
-    else
-        put s
-        >>=
-        flush_flatten
-        >>=
-        fun _ ->
-        line str
-
-
-
-let substring (str: string) (start: int) (len: int): doc =
-    assert (0 <= start);
-    assert (start + len <= String.length str);
-    if len = 0 then
-        empty
-    else
-        put_text (Text.substring str start len)
-
-
-let string (str: string): doc =
-    substring str 0 (String.length str)
-
-
-let fill (n: int) (c: char): doc =
-    if n = 0 then
-        empty
-    else
-        put_text (Text.fill n c)
-
-
-let char (c: char): doc =
-    put_text (Text.char c)
-
 
 
 
