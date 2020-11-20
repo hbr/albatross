@@ -294,6 +294,10 @@ let group (doc: doc): doc =
 
 
 
+let flush_flatten (): unit m =
+    assert false
+
+
 let flush_one_effective (): bool m =
     get >>= fun s ->
     if State.buffer_fits s then
@@ -335,6 +339,33 @@ let put_text (text: Text.t): doc =
             assert false
 
 
+
+let rec line (str: string): doc =
+    get
+    >>=
+    fun s ->
+    if State.line_direct_out s then
+        print_line
+
+    else if State.within_active s then
+        let s = State.push_break str s in
+        if State.buffer_fits s then
+            put s
+        else
+            put s
+            >>=
+            flush_effective
+
+    else
+        put s
+        >>=
+        flush_flatten
+        >>=
+        fun _ ->
+        line str
+
+
+
 let substring (str: string) (start: int) (len: int): doc =
     assert (0 <= start);
     assert (start + len <= String.length str);
@@ -358,22 +389,6 @@ let fill (n: int) (c: char): doc =
 let char (c: char): doc =
     put_text (Text.char c)
 
-
-
-let line (str: string): doc =
-    get >>= fun s ->
-    if State.line_direct_out s then
-        print_line
-    else if State.within_active s then
-        let s = State.push_break str s in
-        if State.buffer_fits s then
-            put s
-        else
-            assert false (* flush until fits *)
-    else
-        (* The break hint ends the active region. Print the buffer
-           flattened and try again. *)
-        assert false
 
 
 

@@ -23,27 +23,102 @@ and
         chunks: chunk Deque.t;
     }
 
-type buffer = {
-    ngroups: int;
-    blength: int;
-    groups: group Deque.t;
-}
+
+
+
+module Chunk =
+struct
+    type t = chunk
+
+    let make (break_text: string) (indent: int): t =
+        {
+            break_text;
+            indent;
+            texts = Deque.empty;
+            chunk_groups = Deque.empty;
+        }
+
+    let push_text (text: Text.t) (chunk: t): t =
+        (* If the chunk has already groups, no more text can be added. *)
+        assert (Deque.is_empty chunk.chunk_groups);
+        {
+            chunk with
+            texts =
+                Deque.push_rear
+                    text
+                    chunk.texts
+        }
+
+    let add_group (group: group) (chunk: t): t =
+        {
+            chunk with
+            chunk_groups =
+                Deque.push_rear
+                    group
+                    chunk.chunk_groups;
+        }
+end
+
+
+
+module Group =
+struct
+    type t = group
+
+    let push_text (text: Text.t) (group: t): t =
+        (* Text can only be pushed to a group if it has at least one chunk. *)
+        assert (not (Deque.is_empty group.chunks));
+        {
+            group with
+            chunks =
+                Deque.update_last
+                    (Chunk.push_text text)
+                    group.chunks;
+            glength =
+                group.glength + Text.length text;
+        }
+end
 
 
 module Buffer =
 struct
-    let empty: buffer =
+    type t = {
+        ngroups: int;
+        length: int;
+        groups: group list;
+    }
+
+
+    let empty: t =
         {
             ngroups = 0;
-            blength = 0;
-            groups  = Deque.empty;
+            length = 0;
+            groups  = [];
         }
 
-    let count (b: buffer): int =
+
+    let count (b: t): int =
         b.ngroups
 
-    let length (b: buffer): int =
-        b.blength
+
+    let length (b: t): int =
+        b.length
+
+
+    let push_text (text: Text.t) (b: t): t =
+        match b.groups with
+        | hd :: tl ->
+            {
+                b with
+                groups =
+                    (Group.push_text text hd) :: tl;
+                length =
+                    b.length + Text.length text;
+            }
+        | _ ->
+            assert false (* Illegal call: Before text can be pushed, at least a
+                            line break has to be pushed, i.e. the buffer cannot
+                            be empty. *)
 end
 
 
@@ -67,7 +142,7 @@ type t = {
     right_groups: int;     (* Number of open groups to the right of the last
                               open group in the buffer *)
 
-    buffer: buffer;
+    buffer: Buffer.t;
 }
 
 
@@ -148,8 +223,47 @@ let fits (n: int) (s: t): bool =
 
     Grammar of the buffer content:
 
-        chunk ::= Break Text* group*
-        group ::= group* chunk*
+        buffer  ::= igroups                 -- outermost to innermost
+
+        igroup  ::= { groups chunks         -- incomplete group
+
+        chunk   ::= break texts groups
+
+        group   ::= { groups chunks }       -- '{' start of group, '}' end of
+                                            -- group
+
+   Invariant:
+
+        - The sum of `effective_groups`, `active_groups` and `right_groups` is
+        only incremented by `open_group` and decremented by `close_group`.
+
+        - The `active_groups` can only be incremented as long as the buffer is
+        empty. If the buffer is not empty, they can be decremented. `open_group`
+        increments the `right_groups` if there is a non empty buffer.
+
+        - Every line break in buffering mode creates a new chunk with a break
+        hint only and either appends this chunk to some incomplete group or
+        makes a new incomplete group with this chunk.
+
+        - The groups in the buffer are never empty. At the start of buffering we
+        have an innermost incomplete group with a line break only chunk and all
+        the outer incomplete groups contain at innermost group directly or
+        indirectly. A complete group is only generated from an incomplete group
+        and is therefore nonempty as well.
+
+        - The last incomplete group in the buffer has at least one chunk at the
+        end.
+
+        - Any complete group in the buffer (either at the end of a chunk or at
+        the start of an incomplete group) is immediately followed by a break
+        hint. Reason: Groups are completed only if a break hint is entered into
+        the buffer. The chunk with the break hint immediately follows the
+        completed group.
+
+        - Break hints can be put into the buffer only if there is at least one
+        active group. Reason: If there is no active group then the break hint
+        marks the end of the active region and causes the buffer to be flushed
+        flattened.
 
 
     Start of buffering:
@@ -195,25 +309,6 @@ let buffered_groups (s: t): int =
     Buffer.count s.buffer
 
 
-let enter_group (s: t): t =
-    if s.active_groups < buffered_groups s then
-        {s with right_groups = s.right_groups + 1}
-    else
-        {s with active_groups = s.active_groups + 1}
-
-
-let leave_group (s: t): t =
-    if 0 < s.right_groups then
-        {s with right_groups = s.right_groups - 1}
-    else if 0 < s.active_groups then
-        {s with active_groups = s.active_groups - 1}
-    else
-        begin
-            assert (0 < s.effective_groups);
-            {s with effective_groups = s.effective_groups - 1}
-        end
-
-
 let is_buffering (s: t): bool =
     0 < buffered_groups s
 
@@ -234,6 +329,26 @@ let within_active (s: t): bool =
 
 let buffer_fits (s: t): bool =
     fits (Buffer.length s.buffer) s
+
+
+
+let enter_group (s: t): t =
+    if is_buffering s then
+        {s with right_groups = s.right_groups + 1}
+    else
+        {s with active_groups = s.active_groups + 1}
+
+
+let leave_group (s: t): t =
+    if 0 < s.right_groups then
+        {s with right_groups = s.right_groups - 1}
+    else if 0 < s.active_groups then
+        {s with active_groups = s.active_groups - 1}
+    else
+        begin
+            assert (0 < s.effective_groups);
+            {s with effective_groups = s.effective_groups - 1}
+        end
 
 
 
