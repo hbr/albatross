@@ -867,7 +867,8 @@ let print_readable (r:R.t): unit =
     else
       ()
   in
-  print r
+  print r;
+  printf "\n"
 
 
 
