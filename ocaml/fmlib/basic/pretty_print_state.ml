@@ -1,4 +1,4 @@
-module Text = Pretty_printer_text
+module Text = Pretty_print_text
 
 
 type

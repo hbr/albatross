@@ -28,8 +28,8 @@ end
 
 
 
-module Text   = Pretty_printer_text
-module State  = Pretty_printer_state
+module Text   = Pretty_print_text
+module State  = Pretty_print_state
 module Buffer = State.Buffer
 module Group  = State.Group
 module Chunk  = State.Chunk
