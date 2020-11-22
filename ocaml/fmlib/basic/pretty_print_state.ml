@@ -1,3 +1,5 @@
+open Common
+
 module Text = Pretty_print_text
 
 
@@ -38,11 +40,18 @@ struct
             chunk_groups = Deque.empty;
         }
 
-    let push_text (text: Text.t) (chunk: t): t =
+    let push_text (text: Text.t) (indent: int) (chunk: t): t =
         (* If the chunk has already groups, no more text can be added. *)
         assert (Deque.is_empty chunk.chunk_groups);
         {
             chunk with
+
+            indent =
+                if Deque.is_empty chunk.texts then
+                    indent
+                else
+                    chunk.indent;
+
             texts =
                 Deque.push_rear
                     text
@@ -81,17 +90,57 @@ module Group =
 struct
     type t = group
 
-    let push_text (text: Text.t) (group: t): t =
+    let empty: t =
+        {
+            glength = 0;
+            complete_groups = Deque.empty;
+            chunks = Deque.empty;
+        }
+
+
+    let make (str: string) (indent: int): t =
+        {
+            glength = String.length str;
+            complete_groups = Deque.empty;
+            chunks = Deque.(empty |> push_rear (Chunk.make str indent));
+        }
+
+
+    let push_text (text: Text.t) (indent: int) (group: t): t =
         (* Text can only be pushed to a group if it has at least one chunk. *)
         assert (not (Deque.is_empty group.chunks));
         {
             group with
             chunks =
                 Deque.update_last
-                    (Chunk.push_text text)
+                    (Chunk.push_text text indent)
                     group.chunks;
             glength =
                 group.glength + Text.length text;
+        }
+
+    let push_break (str: string) (indent: int) (group: t): t =
+        {
+            group with
+
+            chunks =
+                Deque.push_rear
+                    (Chunk.make str indent)
+                    group.chunks;
+
+            glength =
+                group.glength + String.length str;
+        }
+
+
+    let add_complete (complete_group: t) (group: t): t =
+        {
+            group with
+
+            complete_groups =
+                Deque.push_rear
+                    complete_group
+                    group.complete_groups;
         }
 
 
@@ -130,28 +179,107 @@ struct
         b.ngroups
 
 
+    let is_empty (b: t): bool =
+        b.ngroups = 0
+
+
+    let has (b: t): bool =
+        b.ngroups <> 0
+
+
     let length (b: t): int =
         b.length
 
 
-    let push_text (text: Text.t) (b: t): t =
+    let pop_group (b: t): Group.t * t =
+        assert (0 < count b);
         match b.groups with
-        | hd :: tl ->
+        | [] ->
+            assert false (* Illegal call! *)
+        | group :: groups ->
+            group,
+            {b with groups}
+
+
+    let push_text (text: Text.t) (indent: int) (buffer: t): t =
+        assert (0 < count buffer);
+        let hd, tl =
+            List.split_head_tail buffer.groups
+        in
+        {
+            buffer with
+
+            groups =
+                (Group.push_text text indent hd) :: tl;
+
+            length =
+                buffer.length + Text.length text;
+        }
+
+
+    let push_break (str: string) (indent: int) (b: t): t =
+        assert (0 < count b);
+        let hd, tl =
+            List.split_head_tail b.groups
+        in
+        {
+            b with
+
+            groups =
+                (Group.push_break str indent hd) :: tl;
+
+            length =
+                b.length + String.length str
+        }
+
+
+    let close_one (buffer: t): t =
+        match buffer.groups with
+        | last :: previous :: groups ->
             {
-                b with
+                buffer with
+
                 groups =
-                    (Group.push_text text hd) :: tl;
-                length =
-                    b.length + Text.length text;
+                    Group.add_complete last previous :: groups
             }
         | _ ->
-            assert false (* Illegal call: Before text can be pushed, at least a
-                            line break has to be pushed, i.e. the buffer cannot
-                            be empty. *)
+            assert false (* Illegal call! *)
+
+
+    let close_and_open
+            (nclose: int)
+            (nopen: int)
+            (str: string)
+            (indent: int)
+            (buffer: t)
+        : t
+        =
+        assert (nclose = 0 || nclose < count buffer);
+        assert (0 < nopen);
+        let buffer =
+            Int.iterate nclose close_one buffer
+        in
+        {
+            ngroups =
+                buffer.ngroups - nclose + nopen;
+
+            length =
+                buffer.length + String.length str;
+
+            groups =
+                Group.make str indent
+                ::
+                Int.iterate
+                    (nopen - 1)
+                    (fun gs -> Group.empty :: gs)
+                    buffer.groups;
+        }
+
 
 
     let reverse (b: t): t =
         {b with groups = List.rev b.groups}
+
 
     let groups (b: t): Group.t list =
         b.groups
@@ -295,8 +423,9 @@ let fits (n: int) (s: t): bool =
         only incremented by `open_group` and decremented by `close_group`.
 
         - The `active_groups` can only be incremented as long as the buffer is
-        empty. If the buffer is not empty, they can be decremented. `open_group`
-        increments the `right_groups` if there is a non empty buffer.
+        empty. If the buffer is not empty, they can only be decremented.
+        `open_group` increments the `right_groups` if there is a non empty
+        buffer.
 
         - Every line break in buffering mode creates a new chunk with a break
         hint only and either appends this chunk to some incomplete group or
@@ -321,43 +450,6 @@ let fits (n: int) (s: t): bool =
         active group. Reason: If there is no active group then the break hint
         marks the end of the active region and causes the buffer to be flushed
         flattened.
-
-
-    Start of buffering:
-
-        There are open active groups and the first break hint with one of the
-        active groups arrive.
-
-        We have to open all active groups in the buffer. All outer active groups
-        are empty, only the innermost has the break hint and nothing else.
-
-   Text during buffering:
-
-        Is always appended to the last chunk of the last opened group.
-
-   Break hint during buffering within open active groups:
-
-        a) More open active groups than groups in the buffer:
-
-            Append new groups in the buffer and put a chunk with the break hint
-            to the last group in the buffer.
-
-        b) The same number of active groups as groups in the buffer:
-
-            Add a new chunk to the last group in the buffer
-
-        c) Fewer active groups (but still some) than groups in the buffer:
-
-            Close the corresponging groups in the buffer and append them to the
-            last chunk of the parent group or to the completed groups of the
-            parent group. Add a new chunk to the last group in the buffer.
-
-    Break hint during buffering outside active groups:
-
-        Buffer has to be flushed as flattened and then it has to be checked
-        whether the break hint starts buffering again.
-
-
  *)
 
 
@@ -389,23 +481,63 @@ let buffer_fits (s: t): bool =
 
 
 
-let push_text (_: Text.t) (s: t): t =
+let push_text (text: Text.t) (s: t): t =
     assert (is_buffering s);
-    assert false
+    {s with
+     buffer = Buffer.push_text text s.current_indent s.buffer}
 
 
 
-let push_break (_: string) (s: t): t =
+let push_break (str: string) (s: t): t =
     assert (within_active s);
     let oa = s.active_groups
     and nbuf = buffered_groups s
     in
-    if nbuf < oa then
-        assert false
-    else if nbuf = oa then
-        assert false
+    if nbuf = 0 then
+        (* Start buffering *)
+        { s with
+          buffer =
+              Buffer.close_and_open
+                  0
+                  oa
+                  str
+                  s.current_indent
+                  s.buffer
+        }
+    else if oa < nbuf then
+        (* The innermost [nbuf - oa] groups in the buffer have already been
+         * closed by the user. We close these groups in the buffer as well and
+         * open [right_groups] in the buffer there the last group has a chunk
+         * with the break hint. *)
+        {
+            s with
+            right_groups =
+                0;
+            active_groups =
+                oa + s.right_groups;
+            buffer =
+                Buffer.close_and_open
+                    (nbuf - oa)
+                    s.right_groups
+                    str
+                    s.current_indent
+                    s.buffer;
+        }
+    else if oa = nbuf then
+        (* The innermost group in the buffer is still open. We add a new chunk
+         * with this break hint to the innermost group. *)
+        {
+            s with
+
+            buffer =
+                Buffer.push_break str s.current_indent s.buffer;
+        }
     else
-        assert false
+        (* nbuf < oa *)
+        assert false (* This case cannot happen. At the start of buffering we
+                        have [nbuf = oa]. If more groups are opened, they are
+                        all counted as [right_groups]. *)
+
 
 
 let pull_buffer (s: t): Buffer.t * t =
@@ -413,11 +545,65 @@ let pull_buffer (s: t): Buffer.t * t =
     {s with buffer = Buffer.empty}
 
 
-let push_buffer (_: Buffer.t) (s: t): t =
-    assert (direct_out s);
-    assert false
+
+let flatten_done (s: t): t =
+    (* The complete buffer has been flattened. *)
+    assert (not (is_buffering s));
+    assert (s.active_groups = 0);
+    {
+        s with
+         active_groups = s.right_groups;
+         right_groups  = 0;
+    }
 
 
+
+let effective_done (buffer: Buffer.t) (nflushed: int) (s: t): t =
+    (* The outermost [nflushed] groups have been flushed as effective groups.
+       Now the buffer fits.
+     *)
+    assert (not (is_buffering s));
+    assert (Buffer.is_empty buffer || fits (Buffer.length buffer) s);
+    let buffer =
+        Buffer.reverse buffer
+    and nflushed =
+        min nflushed s.active_groups (* Of the flushed groups, only the groups
+                                        count which had been open initially. *)
+    in
+    let effective_groups, active_groups, right_groups =
+        if Buffer.count buffer = 0 then
+            (* All groups have been flushed, buffer is empty. *)
+            begin
+                s.effective_groups + nflushed,
+                s.active_groups + s.right_groups - nflushed,
+                0
+            end
+        else if 0 < s.active_groups then
+            s.effective_groups + nflushed,
+            s.active_groups    - nflushed,
+            s.right_groups
+        else
+            begin
+                assert (s.active_groups = 0);
+                assert (nflushed = 0);
+                s.effective_groups,
+                s.right_groups,
+                0
+            end
+    in
+    {
+        s with buffer; effective_groups; active_groups; right_groups;
+    }
+
+
+
+
+
+
+
+(* Enter and Leave Groups
+ * ======================
+ *)
 
 let enter_group (s: t): t =
     if is_buffering s then

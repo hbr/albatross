@@ -197,20 +197,23 @@ let alternatives
 
 let print_text (text: Text.t) (): unit m =
     fun s k ->
-    More (
-        text,
-        State.advance_position (Text.length text) s,
-        k ()
-    )
-
-
-let print_indent (): unit m =
-    get >>= fun s ->
-    let n = State.line_indent s in
-    if n = 0 then
-        return ()
+    let indent =
+        State.line_indent s
+    and more s =
+        More (
+            text,
+            State.advance_position (Text.length text) s,
+            k ()
+        )
+    in
+    if indent = 0 then
+        more s
     else
-        print_text (Text.fill n ' ') ()
+        More (
+            Text.fill indent ' ',
+            State.advance_position indent s,
+            more
+        )
 
 
 let print_line (): unit m =
@@ -306,17 +309,20 @@ and flush_flatten_chunk (chunk: Chunk.t) (): unit m =
 
 
 let flush_flatten (): unit m =
+    extract
+        State.pull_buffer
+    >>=
+    fun buffer ->
     let rec flush buffer () =
         match Buffer.pop buffer with
         | None ->
             return ()
         | Some (group, buffer) ->
-            flush_flatten_group group () >>= flush buffer
+            flush_flatten_group group ()
+            >>= flush buffer
+            >>= fun () ->
+            update State.flatten_done
     in
-    extract
-        State.pull_buffer
-    >>=
-    fun buffer ->
     flush buffer ()
 
 
@@ -334,7 +340,7 @@ let rec flush_effective_group (g: Group.t) (): unit m =
         ()
     >>=
     flush_deque
-        flush_flatten_chunk
+        flush_effective_chunk
         (Group.chunks g)
 
 
@@ -366,21 +372,33 @@ let flush_effective (): unit m =
         State.pull_buffer
     >>=
     fun buffer ->
-    let rec flush buffer () =
+    let rec flush buffer nflushed () =
+        let flush_done () =
+            update (State.effective_done buffer nflushed)
+        in
         choice
             (State.fits (Buffer.length buffer))
-            (fun () -> update (State.push_buffer buffer))
+            flush_done
             (fun () ->
              match Buffer.pop buffer with
              | None ->
-                 return ()
+                 flush_done ()
              | Some (group, buffer) ->
                  choice
                      (State.fits (Group.length group))
-                     (flush_flatten_group group >=> flush buffer)
-                     (flush_effective_group group >=> flush buffer))
+                     (
+                         flush_flatten_group group
+                         >=>
+                         flush buffer (nflushed + 1)
+                     )
+                     (
+                         flush_effective_group group
+                         >=>
+                         flush buffer (nflushed + 1)
+                     )
+            )
     in
-    flush buffer ()
+    flush buffer 0 ()
 
 
 
@@ -407,7 +425,7 @@ let update_and_flush (f: State.t -> State.t) (): unit m =
 let put_text (text: Text.t): unit m =
     choice
         State.direct_out
-        (print_indent >=> print_text text)
+        (print_text text)
         (update_and_flush (State.push_text text))
 
 
@@ -444,7 +462,7 @@ type doc = unit m
 
 
 let layout (width: int) (ribbon: int) (doc: doc): t =
-    doc
+    (doc >>= flush_flatten)
         (State.init width ribbon)
         (fun () _ -> Done)
 
@@ -556,6 +574,10 @@ let space: doc =
     line " "
 
 
+let pack (break: string) (lst: doc list): doc =
+    separated_by (line break |> group) lst
+
+
 let wrap_words (s: string): doc =
     let word_start i =
         String.find (fun c -> c <> ' ') i s
@@ -603,7 +625,7 @@ let wrap_words (s: string): doc =
 module From = String.From_readable (Readable)
 
 
-let test
+let test0
         (width: int) (ribbon: int) (print: bool)
         (doc: doc)
         (expected: string)
@@ -615,6 +637,15 @@ let test
     if print then
         Printf.printf "\n%s\n" res;
     res = expected
+
+
+let test (width: int) (print: bool) (doc: doc) (expected: string): bool =
+    test0 width width print doc expected
+
+
+let string_list (lst: string list): doc list =
+    List.map string lst
+
 
 
 let%test _ =
@@ -633,4 +664,60 @@ let%test _ =
         \    indented\n\
         line2"
     in
-    test 70 70 false doc expected
+    test 70 false doc expected
+
+
+
+let%test _ =
+    let doc =
+        pack " " (string_list ["0"; "1"])
+    and expected =
+        "0 1"
+    and width =
+        3
+    in
+    test width false doc expected
+
+
+let%test _ =
+    let doc =
+        pack " " (string_list ["0"; "1"])
+    and expected =
+        "0\n1"
+    and width =
+        2
+    in
+    test width false doc expected
+
+
+let%test _ =
+    let doc =
+        pack " " (string_list ["0"; "1"; "ab"; "cd"; "3"; "4"])
+    and expected =
+        "0 1\nab\ncd\n3 4"
+    and width =
+        3
+    in
+    test width false doc expected
+
+
+let%test _ =
+    let doc =
+        pack
+            " "
+            [char '0'; nest 2 (char '1'); char '2']
+    and expected =
+        "0\n  1\n2"
+    in
+    test 2 false doc expected
+
+
+let%test _ =
+    let doc =
+        wrap_words "0 1 ab cd"
+    and expected =
+        "0 1\n\
+         ab\n\
+         cd"
+    in
+    test 3 false doc expected
