@@ -134,14 +134,25 @@ struct
 
 
     let add_complete (complete_group: t) (group: t): t =
-        {
-            group with
+        if Deque.is_empty group.chunks then
+            {
+                group with
 
-            complete_groups =
-                Deque.push_rear
-                    complete_group
-                    group.complete_groups;
-        }
+                complete_groups =
+                    Deque.push_rear
+                        complete_group
+                        group.complete_groups;
+            }
+        else
+            {
+                group with
+
+                chunks =
+                    Deque.update_last
+                        (Chunk.add_group complete_group)
+                        group.chunks;
+            }
+
 
 
     let length (group: t): int =
@@ -183,22 +194,8 @@ struct
         b.ngroups = 0
 
 
-    let has (b: t): bool =
-        b.ngroups <> 0
-
-
     let length (b: t): int =
         b.length
-
-
-    let pop_group (b: t): Group.t * t =
-        assert (0 < count b);
-        match b.groups with
-        | [] ->
-            assert false (* Illegal call! *)
-        | group :: groups ->
-            group,
-            {b with groups}
 
 
     let push_text (text: Text.t) (indent: int) (buffer: t): t =
@@ -280,9 +277,6 @@ struct
     let reverse (b: t): t =
         {b with groups = List.rev b.groups}
 
-
-    let groups (b: t): Group.t list =
-        b.groups
 
     let pop (b: t): (Group.t * t) option =
         match b.groups with

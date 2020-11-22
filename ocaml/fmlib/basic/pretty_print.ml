@@ -1,33 +1,5 @@
 open Common
 
-module type PRETTY =
-sig
-    type t
-    val has_more: t -> bool
-    val peek: t -> char
-    val advance: t -> t
-
-    type doc
-
-    val layout: int -> int -> doc -> t
-
-    val empty: doc
-    val string: string -> doc
-    val substring: string -> int -> int -> doc
-    val char: char -> doc
-    val fill: int -> char -> doc
-    val line: string -> doc
-    val space: doc
-    val cut: doc
-    val nest: int -> doc -> doc
-    val group: doc -> doc
-    val (<+>): doc -> doc -> doc
-    val chain: doc list -> doc
-end
-
-
-
-
 module Text   = Pretty_print_text
 module State  = Pretty_print_state
 module Buffer = State.Buffer
@@ -83,19 +55,9 @@ struct
                 f state
             | Some text ->
                 More (text, state, f)
-
-
-    let next_text (p: t): (Text.t * t) option =
-        match p with
-        | Done ->
-            None
-
-        | More (text, state, f) ->
-            Some (text, f state)
-
 end
 
-open Readable
+include Readable
 
 
 
@@ -132,16 +94,6 @@ let (>=>) (f: 'a -> 'b m) (g: 'b -> 'c m): 'a -> 'c m =
         a
         s
         (fun b s -> g b s k)
-
-
-let get: State.t m =
-    fun s k ->
-    k s s
-
-
-let put (s: State.t): unit m =
-    fun _ k ->
-    k () s
 
 
 let update (f: State.t -> State.t): unit m =
