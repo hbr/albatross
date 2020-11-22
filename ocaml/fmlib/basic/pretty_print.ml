@@ -1,7 +1,7 @@
 open Common
 
-module Text   = Pretty_print_text
-module State  = Pretty_print_state
+module State  = Pretty_state
+module Text   = State.Text
 module Buffer = State.Buffer
 module Group  = State.Group
 module Chunk  = State.Chunk
@@ -69,8 +69,9 @@ include Readable
  * =====
  *
  * The basis of the pretty printer is a continuation monad with a state. We need
- * the basic monadic operations [return] and [>>=] and functions to get, put and
- * update the state.
+ * the basic monadic operations [return] and [>>=] and functions which operate
+ * on the state. I.e. a state update and making decisions based on the context
+ * of the state.
  *)
 
 
@@ -102,7 +103,7 @@ let update (f: State.t -> State.t): unit m =
 
 
 
-let extract (f: State.t -> 'a * State.t): 'a m =
+let update_and_get (f: State.t -> 'a * State.t): 'a m =
     fun s k ->
     let a, s = f s in
     k a s
@@ -144,6 +145,8 @@ let alternatives
 
 (* Generate Output
  * ===============
+ *
+ * Fill the readable structure.
  *)
 
 
@@ -261,7 +264,7 @@ and flush_flatten_chunk (chunk: Chunk.t) (): unit m =
 
 
 let flush_flatten (): unit m =
-    extract
+    update_and_get
         State.pull_buffer
     >>=
     fun buffer ->
@@ -320,7 +323,7 @@ and flush_group (g: Group.t) (): unit m =
 
 
 let flush_effective (): unit m =
-    extract
+    update_and_get
         State.pull_buffer
     >>=
     fun buffer ->
