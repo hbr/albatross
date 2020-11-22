@@ -2,7 +2,6 @@
 type t =
     | String of string * int * int
     | Fill of int * char
-    | Char of char
 
 
 let substring (str: string) (start: int) (len: int): t =
@@ -23,7 +22,7 @@ let fill (n: int) (c: char): t =
     Fill (n, c)
 
 let char (c: char): t =
-    Char c
+    Fill (1, c)
 
 
 let length: t -> int = function
@@ -31,8 +30,6 @@ let length: t -> int = function
         len
     | Fill (len, _) ->
         len
-    | Char _ ->
-        1
 
 
 let peek (text: t): char =
@@ -41,8 +38,6 @@ let peek (text: t): char =
         assert (start < String.length s);
         s.[start]
     | Fill (_, c) ->
-        c
-    | Char c ->
         c
 
 
@@ -58,5 +53,3 @@ let advance (text: t): t option =
             Some (Fill (len - 1, c))
         else
             None
-    | Char _ ->
-        None
