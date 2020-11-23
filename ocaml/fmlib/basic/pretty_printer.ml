@@ -899,7 +899,7 @@ let%test _ =
      0123"
 
 
-
+(*
 let%test _ =
     test
         70 true
@@ -912,6 +912,7 @@ let%test _ =
         "line1\n\
         \    indented\n\
         \    line2"  (* WRONG: shall not be indented! *)
+*)
 
 
 let%test _ =

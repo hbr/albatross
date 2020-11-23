@@ -683,4 +683,17 @@ let increment_indent (n: int) (s: t): t =
                 new_indent
             else
                 s.next_indent;
+        (* MISSING: Update the buffer with the new indentation information.
+         *
+         * The buffer has to be updated if a new chunk has been opened an no
+         * text has yet been pushed.
+         *
+         * This update makes the updating of the indentation with any new text
+         * pushed into the buffer superfluous.
+         *
+         * MORE: We could define a new structure [Line] which has the current
+         * indent, the width and the ribbon size. We need [Line] as current,
+         * next and in each chunk in the buffer. This would allow to update the
+         * width and the ribbon size dynamically.
+         *)
     }
