@@ -179,14 +179,6 @@ struct
         }
 
 
-    let make (str: string) (indent: int): t =
-        {
-            glength = String.length str;
-            complete_groups = Deque.empty;
-            chunks = Deque.(empty |> push_rear (Chunk.make str indent));
-        }
-
-
     let push_text (text: Text.t) (indent: int) (group: t): t =
         (* Text can only be pushed to a group if it has at least one chunk. *)
         assert (not (Deque.is_empty group.chunks));
@@ -199,6 +191,7 @@ struct
             glength =
                 group.glength + Text.length text;
         }
+
 
     let push_break (str: string) (indent: int) (group: t): t =
         {
@@ -327,7 +320,10 @@ struct
                 buffer with
 
                 groups =
-                    Group.add_complete last previous :: groups
+                    Group.add_complete last previous :: groups;
+
+                ngroups =
+                    buffer.ngroups - 1;
             }
         | _ ->
             assert false (* Illegal call! *)
@@ -342,26 +338,23 @@ struct
         : t
         =
         assert (nclose = 0 || nclose < count buffer);
-        assert (0 < nopen);
-        let buffer =
-            Int.iterate nclose close_one buffer
-        in
-        {
-            ngroups =
-                buffer.ngroups - nclose + nopen;
+        assert (0 < count buffer + nopen - nclose);
+        push_break
+            str
+            indent
+            {
+                (Int.iterate nclose close_one buffer)
+                with
 
-            length =
-                buffer.length + String.length str;
+                ngroups =
+                    buffer.ngroups + nopen;
 
-            groups =
-                Group.make str indent
-                ::
-                Int.iterate
-                    (nopen - 1)
-                    (fun gs -> Group.empty :: gs)
-                    buffer.groups;
-        }
-
+                groups =
+                    Int.iterate
+                        nopen
+                        (fun gs -> Group.empty :: gs)
+                        buffer.groups;
+            }
 
 
     let reverse (b: t): t =
@@ -485,63 +478,6 @@ let fits (n: int) (s: t): bool =
 
 (* Groups and Buffering
  * ====================
-
-
-    There is a time lag between the opening and closing of a group by the user
-    and the opening and closing of groups in the buffer.
-
-    A group in the buffer is opened at the first break hint in that group. All
-    text before the first break hint belongs is placed before the group.
-
-    A group in the buffer is closed at the first break hint after the group has
-    been closed by the user. All text before the first break hint after the user
-    closing the group still belongs to that group.
-
-
-    Grammar of the buffer content:
-
-        buffer  ::= igroups                 -- outermost to innermost
-
-        igroup  ::= { groups chunks         -- incomplete group
-
-        chunk   ::= break texts groups
-
-        group   ::= { groups chunks }       -- '{' start of group, '}' end of
-                                            -- group
-
-   Invariant:
-
-        - The sum of `effective_groups`, `active_groups` and `right_groups` is
-        only incremented by `open_group` and decremented by `close_group`.
-
-        - The `active_groups` can only be incremented as long as the buffer is
-        empty. If the buffer is not empty, they can only be decremented.
-        `open_group` increments the `right_groups` if there is a non empty
-        buffer.
-
-        - Every line break in buffering mode creates a new chunk with a break
-        hint only and either appends this chunk to some incomplete group or
-        makes a new incomplete group with this chunk.
-
-        - The groups in the buffer are never empty. At the start of buffering we
-        have an innermost incomplete group with a line break only chunk and all
-        the outer incomplete groups contain at innermost group directly or
-        indirectly. A complete group is only generated from an incomplete group
-        and is therefore nonempty as well.
-
-        - The last incomplete group in the buffer has at least one chunk at the
-        end.
-
-        - Any complete group in the buffer (either at the end of a chunk or at
-        the start of an incomplete group) is immediately followed by a break
-        hint. Reason: Groups are completed only if a break hint is entered into
-        the buffer. The chunk with the break hint immediately follows the
-        completed group.
-
-        - Break hints can be put into the buffer only if there is at least one
-        active group. Reason: If there is no active group then the break hint
-        marks the end of the active region and causes the buffer to be flushed
-        flattened.
  *)
 
 
@@ -597,7 +533,7 @@ let push_break (str: string) (s: t): t =
                   s.buffer
         }
 
-    else if oa <= nbuf && 0 < s.right_groups then
+    else if oa <= nbuf then
         (* The innermost [nbuf - oa] groups in the buffer have already been
          * closed by the user. We close these groups in the buffer as well and
          * open [right_groups] in the buffer there the last group has a chunk
@@ -616,22 +552,11 @@ let push_break (str: string) (s: t): t =
                     s.current_indent
                     s.buffer;
         }
-    else if oa = nbuf then
-        (* The innermost group in the buffer is still open. We add a new chunk
-         * with this break hint to the innermost group. *)
-        {
-            s with
-
-            buffer =
-                Buffer.push_break str s.current_indent s.buffer;
-        }
     else
         (* nbuf < oa *)
-        (Printf.printf "push_break nbuf %d, oa %d, or %d\n"
-            nbuf oa s.right_groups;
         assert false (* This case cannot happen. At the start of buffering we
                         have [nbuf = oa]. If more groups are opened, they are
-                        all counted as [right_groups]. *))
+                        all counted as [right_groups]. *)
 
 
 

@@ -715,15 +715,15 @@ let doc_tree (tree: tree): doc =
     doc true tree
 
 
-(*
+
 let%test _ =
     let doc =
         doc_tree (tree1 ())
     and expected =
         "ff a (gf b c) d"
     in
-    test 80 true doc expected
-*)
+    test 80 false doc expected
+
 
 
 let%test _ =
