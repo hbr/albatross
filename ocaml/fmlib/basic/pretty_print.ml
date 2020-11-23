@@ -654,7 +654,15 @@ let%test _ =
 
 
 
-
+let%test _ =
+    let doc =
+        string "- "
+        <+>
+        nest 2 (wrap_words"a b c d")
+    and expected =
+        "- a b\n  c d"
+    in
+    test 5 false doc expected
 
 
 
