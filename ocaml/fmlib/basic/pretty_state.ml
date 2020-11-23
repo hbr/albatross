@@ -545,46 +545,48 @@ let push_text (text: Text.t) (s: t): t =
 
 
 let push_break (str: string) (s: t): t =
+    (* Push a break hint to the buffer. At the end, the number of incomplete
+     * groups in the buffer and the number of active groups must be the same
+     * and the number of right groups must be zero. *)
     assert (within_active s);
     let oa = s.active_groups
     and nbuf = buffered_groups s
     in
-    if nbuf = 0 then
-        (* Start buffering *)
-        { s with
-          buffer =
-              Buffer.close_and_open
-                  0
-                  oa
-                  str
-                  s.current_indent
-                  s.buffer
-        }
+    let nclose, nopen =
+        if nbuf = 0 then
+            (* Start buffering *)
+            0,
+            oa
+        else if oa <= nbuf then
+            (* The innermost [nbuf - oa] groups in the buffer have already been
+             * closed by the user. We close these groups in the buffer as well
+             * and open [right_groups] in the buffer there the last group has a
+             * chunk with the break hint. *)
+            nbuf - oa,
+            s.right_groups
+        else
+            (* nbuf < oa *)
+            assert false (* This case cannot happen. At the start of buffering
+                            we have [nbuf = oa]. If more groups are opened, they
+                            are all counted as [right_groups]. *)
+    in
+    {
+        s with
 
-    else if oa <= nbuf then
-        (* The innermost [nbuf - oa] groups in the buffer have already been
-         * closed by the user. We close these groups in the buffer as well and
-         * open [right_groups] in the buffer there the last group has a chunk
-         * with the break hint. *)
-        {
-            s with
-            right_groups =
-                0;
-            active_groups =
-                oa + s.right_groups;
-            buffer =
-                Buffer.close_and_open
-                    (nbuf - oa)
-                    s.right_groups
-                    str
-                    s.current_indent
-                    s.buffer;
-        }
-    else
-        (* nbuf < oa *)
-        assert false (* This case cannot happen. At the start of buffering we
-                        have [nbuf = oa]. If more groups are opened, they are
-                        all counted as [right_groups]. *)
+        right_groups =
+            0;
+
+        active_groups =
+            oa + s.right_groups;
+
+        buffer =
+            Buffer.close_and_open
+                nclose
+                nopen
+                str
+                s.current_indent
+                s.buffer;
+    }
 
 
 
