@@ -121,23 +121,27 @@ struct
             chunk_groups = Deque.empty;
         }
 
-    let push_text (text: Text.t) (indent: int) (chunk: t): t =
+    let push_text (text: Text.t) (chunk: t): t =
         (* If the chunk has already groups, no more text can be added. *)
         assert (Deque.is_empty chunk.chunk_groups);
         {
             chunk with
-
-            indent =
-                if Deque.is_empty chunk.texts then
-                    indent
-                else
-                    chunk.indent;
 
             texts =
                 Deque.push_rear
                     text
                     chunk.texts
         }
+
+
+    let update_line (indent: int) (chunk: t): t=
+        assert (Deque.is_empty chunk.chunk_groups);
+
+        if Deque.is_empty chunk.texts then
+            {chunk with indent}
+        else
+            chunk
+
 
     let add_group (group: group) (chunk: t): t =
         {
@@ -179,14 +183,14 @@ struct
         }
 
 
-    let push_text (text: Text.t) (indent: int) (group: t): t =
+    let push_text (text: Text.t) (group: t): t =
         (* Text can only be pushed to a group if it has at least one chunk. *)
         assert (not (Deque.is_empty group.chunks));
         {
             group with
             chunks =
                 Deque.update_last
-                    (Chunk.push_text text indent)
+                    (Chunk.push_text text)
                     group.chunks;
             glength =
                 group.glength + Text.length text;
@@ -204,6 +208,18 @@ struct
 
             glength =
                 group.glength + String.length str;
+        }
+
+
+    let update_line (indent: int) (group: t): t =
+        assert (not (Deque.is_empty group.chunks));
+        {
+            group with
+
+            chunks =
+                Deque.update_last
+                    (Chunk.update_line indent)
+                    group.chunks;
         }
 
 
@@ -281,7 +297,7 @@ struct
         b.length
 
 
-    let push_text (text: Text.t) (indent: int) (buffer: t): t =
+    let push_text (text: Text.t) (buffer: t): t =
         assert (0 < count buffer);
         let hd, tl =
             List.split_head_tail buffer.groups
@@ -290,7 +306,7 @@ struct
             buffer with
 
             groups =
-                (Group.push_text text indent hd) :: tl;
+                (Group.push_text text hd) :: tl;
 
             length =
                 buffer.length + Text.length text;
@@ -355,6 +371,18 @@ struct
                         (fun gs -> Group.empty :: gs)
                         buffer.groups;
             }
+
+
+    let update_line (indent: int) (buffer: t): t =
+        match buffer.groups with
+        | [] ->
+            buffer
+        | group :: groups ->
+            {buffer with
+             groups =
+                 Group.update_line indent group
+                 ::
+                 groups;}
 
 
     let reverse (b: t): t =
@@ -512,7 +540,7 @@ let buffer_fits (s: t): bool =
 let push_text (text: Text.t) (s: t): t =
     assert (is_buffering s);
     {s with
-     buffer = Buffer.push_text text s.current_indent s.buffer}
+     buffer = Buffer.push_text text s.buffer}
 
 
 
@@ -683,17 +711,9 @@ let increment_indent (n: int) (s: t): t =
                 new_indent
             else
                 s.next_indent;
-        (* MISSING: Update the buffer with the new indentation information.
-         *
-         * The buffer has to be updated if a new chunk has been opened an no
-         * text has yet been pushed.
-         *
-         * This update makes the updating of the indentation with any new text
-         * pushed into the buffer superfluous.
-         *
-         * MORE: We could define a new structure [Line] which has the current
-         * indent, the width and the ribbon size. We need [Line] as current,
-         * next and in each chunk in the buffer. This would allow to update the
-         * width and the ribbon size dynamically.
-         *)
+
+        buffer =
+            Buffer.update_line
+                new_indent
+                s.buffer;
     }
