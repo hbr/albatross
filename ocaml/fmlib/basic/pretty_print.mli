@@ -8,11 +8,11 @@ type doc
 val layout: int -> int -> doc -> t
 
 val empty: doc
-val string: string -> doc
+val text: string -> doc
 val substring: string -> int -> int -> doc
 val char: char -> doc
 val fill: int -> char -> doc
-val line: string -> doc
+val break: string -> doc
 val space: doc
 val cut: doc
 val nest: int -> doc -> doc

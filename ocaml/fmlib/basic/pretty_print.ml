@@ -406,7 +406,7 @@ let substring (str: string) (start: int) (len: int): doc =
         put_text (Text.substring str start len)
 
 
-let string (str: string): doc =
+let text (str: string): doc =
     substring str 0 (String.length str)
 
 
@@ -421,7 +421,7 @@ let char (c: char): doc =
     put_text (Text.char c)
 
 
-let line (str: string): doc =
+let break (str: string): doc =
     put_line str ()
 
 
@@ -491,19 +491,19 @@ let group (doc: doc): doc =
 
 
 let cut: doc =
-    line ""
+    break ""
 
 
 let space: doc =
-    line " "
+    break " "
 
 
-let pack (break: string) (lst: doc list): doc =
-    separated_by (group (line break)) lst
+let pack (hint: string) (lst: doc list): doc =
+    separated_by (group (break hint)) lst
 
 
-let stack (break: string) (lst: doc list): doc =
-    group (separated_by (line break) lst)
+let stack (hint: string) (lst: doc list): doc =
+    group (separated_by (break hint) lst)
 
 
 let wrap_words (s: string): doc =
@@ -572,7 +572,7 @@ let test (width: int) (print: bool) (doc: doc) (expected: string): bool =
 
 
 let string_list (lst: string list): doc list =
-    List.map string lst
+    List.map text lst
 
 let _ = string_list
 
@@ -580,13 +580,13 @@ let _ = string_list
 
 let%test _ =
     let doc =
-        string "line1"
+        text "line1"
         <+> cut
-        <+> nest 4 (string "indented" <+> cut
-                    <+> nest 4 (string "indented2" <+> cut)
-                    <+> string "indented" <+> cut
+        <+> nest 4 (text "indented" <+> cut
+                    <+> nest 4 (text "indented2" <+> cut)
+                    <+> text "indented" <+> cut
                    )
-        <+> string "line2"
+        <+> text "line2"
     and expected =
         "line1\n\
         \    indented\n\
@@ -656,7 +656,7 @@ let%test _ =
 
 let%test _ =
     let doc =
-        string "- "
+        text "- "
         <+>
         nest 2 (wrap_words"a b c d")
     and expected =
@@ -702,10 +702,10 @@ let doc_tree (tree: tree): doc =
     let rec doc is_top tree =
         match tree.children with
         | [] ->
-            string tree.name
+            text tree.name
         | _ ->
             let d =
-                string tree.name <+> space
+                text tree.name <+> space
                 <+>
                 nest
                     2
