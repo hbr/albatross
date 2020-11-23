@@ -41,6 +41,7 @@ end
 module Buffer:
 sig
     type t
+    val count: t -> int
     val length: t -> int
     val pop: t -> (Group.t * t) option
 end
@@ -57,8 +58,8 @@ val line_indent: t -> int
 val advance_position: int -> t -> t
 
 val newline: t -> t
-
 val newline_with_indent: int -> t -> t
+val set_next_indent: int -> t -> t
 
 val fits: int -> t -> bool
 val buffer_fits: t -> bool

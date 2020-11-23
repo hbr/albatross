@@ -198,28 +198,6 @@ let print_line_with_indent (indent: int) (): unit m =
 
 (* Flushing the Buffer
  * ===================
-
-    1. Buffer fits and active region ended:
-
-        Flush the complete buffer flattened. The outermost buffered group has
-        been ended and fits completely. Therefore all inner groups fit
-        completely i.e. the whole buffer can be flushed as flattened.
-
-
-    2. The buffer does not fit:
-
-        The outermost group in the buffer must be effective. The inner groups
-        can still be flattened or effective.
-
-        All completed groups within the outermost group fit. Otherwise they
-        wouldn't had been completed. Therefore the completed groups in the
-        outermost groups can be printed as flattened.
-
-        After the outermost buffered group printed as effective, the remaining
-        buffer might still be too large. I.e. the process of printing the
-        outermost buffered group as effective must be continued until the buffer
-        fits (or is empty).
-
  *)
 
 
@@ -339,18 +317,9 @@ let flush_effective (): unit m =
              | None ->
                  flush_done ()
              | Some (group, buffer) ->
-                 choice
-                     (State.fits (Group.length group))
-                     (
-                         flush_flatten_group group
-                         >=>
-                         flush buffer (nflushed + 1)
-                     )
-                     (
-                         flush_effective_group group
-                         >=>
-                         flush buffer (nflushed + 1)
-                     )
+                 flush_effective_group group ()
+                 >>=
+                 flush buffer (nflushed + 1)
             )
     in
     flush buffer 0 ()
@@ -530,7 +499,11 @@ let space: doc =
 
 
 let pack (break: string) (lst: doc list): doc =
-    separated_by (line break |> group) lst
+    separated_by (group (line break)) lst
+
+
+let stack (break: string) (lst: doc list): doc =
+    group (separated_by (line break) lst)
 
 
 let wrap_words (s: string): doc =
@@ -600,6 +573,8 @@ let test (width: int) (print: bool) (doc: doc) (expected: string): bool =
 
 let string_list (lst: string list): doc list =
     List.map string lst
+
+let _ = string_list
 
 
 
@@ -676,3 +651,112 @@ let%test _ =
          cd"
     in
     test 3 false doc expected
+
+
+
+
+
+
+
+
+
+
+(* Unit Tests with Trees
+ * ---------------------
+ *)
+
+type tree =
+    { name: string; children: tree list; }
+
+
+let leaf (name: string): tree =
+    {name; children = []}
+
+let tree (name: string) (children: tree list): tree =
+    {name; children}
+
+
+let tree0 () =
+    tree "ff" [leaf "a"; leaf "b"; leaf "c"]
+
+let tree1 () =
+    tree
+        "ff"
+        [leaf "a";
+         tree "gf" [leaf "b"; leaf "c"];
+         leaf "d"]
+
+let _ = tree0
+let _ = tree1
+
+
+let doc_tree (tree: tree): doc =
+    let rec doc is_top tree =
+        match tree.children with
+        | [] ->
+            string tree.name
+        | _ ->
+            let d =
+                string tree.name <+> space
+                <+>
+                nest
+                    2
+                    (stack
+                         " "
+                         (List.map (doc false) tree.children))
+            in
+            group (
+                if is_top then
+                    d
+                else
+                    char '(' <+> d <+> char ')'
+            )
+    in
+    doc true tree
+
+
+(*
+let%test _ =
+    let doc =
+        doc_tree (tree1 ())
+    and expected =
+        "ff a (gf b c) d"
+    in
+    test 80 true doc expected
+*)
+
+
+let%test _ =
+    let doc =
+        doc_tree (tree0 ())
+    and expected =
+        "ff\n  a\n  b\n  c"
+    in
+    test 3 false doc expected
+
+
+let%test _ =
+    let doc =
+        doc_tree (tree0 ())
+    and expected =
+        "ff\n  a b c"
+    in
+    test 7 false doc expected
+
+
+let%test _ =
+    let doc =
+        doc_tree (tree1 ())
+    and expected =
+        "ff\n  a\n  (gf b c)\n  d"
+    in
+    test 10 false doc expected
+
+
+let%test _ =
+    let doc =
+        doc_tree (tree1 ())
+    and expected =
+        "ff\n  a\n  (gf\n    b c)\n  d"
+    in
+    test 8 false doc expected

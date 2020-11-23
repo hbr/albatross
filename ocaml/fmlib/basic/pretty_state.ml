@@ -67,6 +67,15 @@ struct
                 Some (Fill (len - 1, c))
             else
                 None
+
+    let to_string (text: t): string =
+        match text with
+        | String (s, start, len) ->
+            String.sub s start len
+        | Fill (len, c) ->
+            String.make len c
+
+    let _ = to_string (* might be needed during debugging *)
 end
 
 
@@ -449,6 +458,9 @@ let newline_with_indent (indent: int) (s: t): t =
      next_indent = indent}
 
 
+let set_next_indent (next_indent: int) (s: t): t =
+    {s with next_indent}
+
 
 let fits (n: int) (s: t): bool =
     (* Is it possible to put [n] more characters on the current line without
@@ -584,7 +596,8 @@ let push_break (str: string) (s: t): t =
                   s.current_indent
                   s.buffer
         }
-    else if oa < nbuf then
+
+    else if oa <= nbuf && 0 < s.right_groups then
         (* The innermost [nbuf - oa] groups in the buffer have already been
          * closed by the user. We close these groups in the buffer as well and
          * open [right_groups] in the buffer there the last group has a chunk
@@ -614,9 +627,11 @@ let push_break (str: string) (s: t): t =
         }
     else
         (* nbuf < oa *)
+        (Printf.printf "push_break nbuf %d, oa %d, or %d\n"
+            nbuf oa s.right_groups;
         assert false (* This case cannot happen. At the start of buffering we
                         have [nbuf = oa]. If more groups are opened, they are
-                        all counted as [right_groups]. *)
+                        all counted as [right_groups]. *))
 
 
 
@@ -632,8 +647,14 @@ let flatten_done (s: t): t =
     assert (s.active_groups = 0);
     {
         s with
-         active_groups = s.right_groups;
-         right_groups  = 0;
+        active_groups =
+             s.right_groups;
+
+        right_groups  =
+             0;
+
+        next_indent =
+            s.current_indent
     }
 
 
@@ -737,5 +758,4 @@ let increment_indent (n: int) (s: t): t =
                 new_indent
             else
                 s.next_indent;
-
     }
