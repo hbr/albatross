@@ -80,6 +80,54 @@ end
 
 
 
+
+
+
+
+(* Line Formatting Data
+ * ====================
+ *)
+
+module Line =
+struct
+    type t = {
+        indent: int;
+        width:  int;
+        ribbon: int;
+    }
+
+    let make (indent: int) (width: int) (ribbon: int): t =
+        {indent; width; ribbon;}
+
+    let indent (l: t): int =
+        l.indent
+
+    let width (l: t): int =
+        l.width
+
+    let ribbon (l: t): int =
+        l.ribbon
+
+    let increment_indent (i: int) (l: t): t =
+        assert (0 <= l.indent + i);
+        {l with indent = l.indent + i}
+
+    let set_width_ribbon (width: int) (ribbon: int) (l: t): t =
+        {l with width; ribbon}
+
+    let set_width (width: int) (l: t): t =
+        {l with width}
+
+    let set_ribbon (ribbon: int) (l: t): t =
+        {l with ribbon}
+end
+
+
+
+
+
+
+
 (* Groups and Chunks in the Buffer
  * ===============================
  *)
@@ -89,8 +137,7 @@ type
         break_text:
             string;
 
-        indent:             (* Indentation level at the first text block. *)
-            int;
+        line: Line.t;       (* before the first text block. *)
 
         texts:
             Text.t Deque.t;
@@ -113,10 +160,10 @@ module Chunk =
 struct
     type t = chunk
 
-    let make (break_text: string) (indent: int): t =
+    let make (break_text: string) (line: Line.t): t =
         {
             break_text;
-            indent;
+            line;
             texts = Deque.empty;
             chunk_groups = Deque.empty;
         }
@@ -134,11 +181,11 @@ struct
         }
 
 
-    let update_line (indent: int) (chunk: t): t=
+    let update_line (line: Line.t) (chunk: t): t=
         assert (Deque.is_empty chunk.chunk_groups);
 
         if Deque.is_empty chunk.texts then
-            {chunk with indent}
+            {chunk with line}
         else
             chunk
 
@@ -157,8 +204,8 @@ struct
         chunk.break_text
 
 
-    let indent (chunk: t): int =
-        chunk.indent
+    let line (chunk: t): Line.t =
+        chunk.line
 
 
     let texts (chunk: t): Text.t Deque.t =
@@ -197,13 +244,13 @@ struct
         }
 
 
-    let push_break (str: string) (indent: int) (group: t): t =
+    let push_break (str: string) (line: Line.t) (group: t): t =
         {
             group with
 
             chunks =
                 Deque.push_rear
-                    (Chunk.make str indent)
+                    (Chunk.make str line)
                     group.chunks;
 
             glength =
@@ -211,14 +258,14 @@ struct
         }
 
 
-    let update_line (indent: int) (group: t): t =
+    let update_line (line: Line.t) (group: t): t =
         assert (not (Deque.is_empty group.chunks));
         {
             group with
 
             chunks =
                 Deque.update_last
-                    (Chunk.update_line indent)
+                    (Chunk.update_line line)
                     group.chunks;
         }
 
@@ -313,7 +360,7 @@ struct
         }
 
 
-    let push_break (str: string) (indent: int) (b: t): t =
+    let push_break (str: string) (line: Line.t) (b: t): t =
         assert (0 < count b);
         let hd, tl =
             List.split_head_tail b.groups
@@ -322,7 +369,7 @@ struct
             b with
 
             groups =
-                (Group.push_break str indent hd) :: tl;
+                (Group.push_break str line hd) :: tl;
 
             length =
                 b.length + String.length str
@@ -349,7 +396,7 @@ struct
             (nclose: int)
             (nopen: int)
             (str: string)
-            (indent: int)
+            (line: Line.t)
             (buffer: t)
         : t
         =
@@ -357,7 +404,7 @@ struct
         assert (0 < count buffer + nopen - nclose);
         push_break
             str
-            indent
+            line
             {
                 (Int.iterate nclose close_one buffer)
                 with
@@ -373,14 +420,14 @@ struct
             }
 
 
-    let update_line (indent: int) (buffer: t): t =
+    let update_line (line: Line.t) (buffer: t): t =
         match buffer.groups with
         | [] ->
             buffer
         | group :: groups ->
             {buffer with
              groups =
-                 Group.update_line indent group
+                 Group.update_line line group
                  ::
                  groups;}
 
@@ -414,15 +461,11 @@ end
 
 
 type t = {
-    width: int;
-    ribbon: int;
+    user_line: Line.t;   (* Current line data from the user *)
+    next_line: Line.t;
 
+    line: Line.t;        (* This line *)
     position: int;       (* Current position on the line *)
-
-    line_indent: int;    (* Anything inserted at position 0 has to be
-                            indented this amount. *)
-    next_indent: int;    (* Indentation of the next line. *)
-    current_indent: int; (* The current indentation level *)
 
 
     active_groups: int;    (* Number of open active groups *)
@@ -435,15 +478,14 @@ type t = {
 
 
 let init (width: int) (ribbon: int): t =
+    let line = Line.make 0 width ribbon
+    in
     {
-        width;
-        ribbon;
-
         position = 0;
 
-        line_indent = 0;
-        next_indent = 0;
-        current_indent = 0;
+        user_line = line;
+        next_line = line;
+        line;
 
         active_groups = 0;
         effective_groups = 0;
@@ -453,9 +495,10 @@ let init (width: int) (ribbon: int): t =
     }
 
 
+
 let line_indent (s: t): int =
     if s.position = 0 then
-        s.line_indent
+        Line.indent s.line
     else
         0
 
@@ -463,39 +506,35 @@ let line_indent (s: t): int =
 let advance_position (n: int) (s: t): t =
     assert ( s.position <> 0
              ||
-             s.line_indent <= n);
+             Line.indent s.line <= n);
     (* Positions between 0 and line_indent are illegal. *)
     {s with position = s.position + n}
 
 
 let newline (s: t): t =
-    {s with position = 0; line_indent = s.next_indent;}
+    {s with position = 0; line = s.next_line;}
 
 
-let newline_with_indent (indent: int) (s: t): t =
+let newline_with_line (line: Line.t) (s: t): t =
     {s with
      position = 0;
-     line_indent = indent;
-     next_indent = indent}
-
-
-let set_next_indent (next_indent: int) (s: t): t =
-    {s with next_indent}
+     line;
+     next_line = line;}
 
 
 let fits (n: int) (s: t): bool =
     (* Is it possible to put [n] more characters on the current line without
      * violating the line width and the ribbon size? *)
     if s.position = 0 then
-        n <= s.ribbon
+        n <= Line.ribbon s.line
         &&
-        s.line_indent + n <= s.width
+        Line.indent s.line + n <= Line.width s.line
     else
         begin
-            assert (s.line_indent <= s.position);
-            s.position - s.line_indent + n <= s.ribbon
+            assert (Line.indent s.line <= s.position);
+            s.position - Line.indent s.line + n <= Line.ribbon s.line
             &&
-            s.position + n <= s.width
+            s.position + n <= Line.width s.line
         end
 
 
@@ -584,7 +623,7 @@ let push_break (str: string) (s: t): t =
                 nclose
                 nopen
                 str
-                s.current_indent
+                s.user_line
                 s.buffer;
     }
 
@@ -608,8 +647,8 @@ let flatten_done (s: t): t =
         right_groups  =
              0;
 
-        next_indent =
-            s.current_indent
+        next_line =
+            s.user_line
     }
 
 
@@ -684,38 +723,62 @@ let leave_group (s: t): t =
 
 
 
-(* Indenting
- * =========
+(* Indenting and Line Info
+ * =======================
  *)
 
-let increment_indent (n: int) (s: t): t =
-    let new_indent =
-        s.current_indent + n
-    in
+
+let update_line (new_line: Line.t) (s: t): t =
     {
         s with
 
-        current_indent =
-            new_indent;
+        user_line =
+            new_line;
 
-        line_indent =
+        line =
             if s.position = 0 then
                 (* Nothing has been printed to the current line. The
-                 * [line_indent] has to be updated immediately. *)
-                new_indent
+                 * [line] has to be updated immediately. *)
+                new_line
             else
-                s.line_indent;
+                s.line;
 
-        next_indent =
+        next_line =
             if direct_out s then
                 (* In direct output mode the new indentation must become
                  * effective for the next line *)
-                new_indent
+                new_line
             else
-                s.next_indent;
+                s.next_line;
 
         buffer =
             Buffer.update_line
-                new_indent
+                new_line
                 s.buffer;
     }
+
+
+
+let increment_indent (n: int) (s: t): t =
+    assert (0 <= Line.indent s.user_line + n);
+    update_line
+        (Line.increment_indent n s.user_line)
+        s
+
+
+let width (width: int) (s: t): int * t =
+    assert (0 <= width);
+    Line.width s.user_line
+    ,
+    update_line
+        (Line.set_width width s.user_line)
+        s
+
+
+let ribbon (ribbon: int) (s: t): int * t =
+    assert (0 <= ribbon);
+    Line.ribbon s.user_line
+    ,
+    update_line
+        (Line.set_ribbon ribbon s.user_line)
+        s

@@ -2,6 +2,7 @@ open Common
 
 module State  = Pretty_state
 module Text   = State.Text
+module Line   = State.Line
 module Buffer = State.Buffer
 module Group  = State.Group
 module Chunk  = State.Chunk
@@ -109,6 +110,12 @@ let update_and_get (f: State.t -> 'a * State.t): 'a m =
     k a s
 
 
+let update_and_ignore (f: State.t -> 'a * State.t): unit m =
+    fun s k ->
+    let _, s = f s in
+    k () s
+
+
 let choice
         (p: State.t -> bool)
         (m1: unit -> 'a m)
@@ -180,11 +187,11 @@ let print_line (): unit m =
     )
 
 
-let print_line_with_indent (indent: int) (): unit m =
+let print_line_with_line (line: Line.t) (): unit m =
     fun s k ->
     More (
         Text.char '\n',
-        State.newline_with_indent indent s,
+        State.newline_with_line line s,
         k ()
     )
 
@@ -279,8 +286,8 @@ let rec flush_effective_group (g: Group.t) (): unit m =
 
 and flush_effective_chunk (chunk: Chunk.t) (): unit m =
     (* The break hint starting the chunk is effective. *)
-    print_line_with_indent
-        (Chunk.indent chunk)
+    print_line_with_line
+        (Chunk.line chunk)
         ()
     >>=
     flush_deque
@@ -472,6 +479,22 @@ let nest (n: int) (doc: doc): doc =
     update (State.increment_indent (-n))
 
 
+let with_width (n: int) (doc: doc): doc =
+    update_and_get (State.width n)
+    >>= fun old_width ->
+    doc
+    >>= fun () ->
+    update_and_ignore (State.width old_width)
+
+
+let with_ribbon (n: int) (doc: doc): doc =
+    update_and_get (State.ribbon n)
+    >>= fun old_ribbon ->
+    doc
+    >>= fun () ->
+    update_and_ignore (State.ribbon old_ribbon)
+
+
 let group (doc: doc): doc =
     update State.enter_group
     <+>
@@ -502,8 +525,14 @@ let pack (hint: string) (lst: doc list): doc =
     separated_by (group (break hint)) lst
 
 
+
+
 let stack (hint: string) (lst: doc list): doc =
-    group (separated_by (break hint) lst)
+    separated_by (break hint) lst
+
+
+let stack_or_pack (hint: string) (lst: doc list): doc =
+    group (stack hint lst)
 
 
 let wrap_words (s: string): doc =
@@ -654,11 +683,12 @@ let%test _ =
 
 
 
+
 let%test _ =
     let doc =
         text "- "
         <+>
-        nest 2 (wrap_words"a b c d")
+        nest 2 (wrap_words "a b c d")
     and expected =
         "- a b\n  c d"
     in
@@ -666,6 +696,16 @@ let%test _ =
 
 
 
+let%test _ =
+    let doc =
+        let para = wrap_words "a b c d" in
+        stack
+            ""
+            [para; with_width 3 para]
+    and expected =
+        "a b c d\na b\nc d"
+    in
+    test 7 false doc expected
 
 
 
@@ -709,7 +749,7 @@ let doc_tree (tree: tree): doc =
                 <+>
                 nest
                     2
-                    (stack
+                    (stack_or_pack
                          " "
                          (List.map (doc false) tree.children))
             in

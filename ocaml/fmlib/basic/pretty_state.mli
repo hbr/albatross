@@ -12,6 +12,12 @@ sig
 end
 
 
+module Line:
+sig
+    type t
+end
+
+
 type chunk
 type group
 
@@ -20,7 +26,7 @@ module Chunk:
 sig
     type t = chunk
     val break_text: t -> string
-    val indent: t -> int
+    val line: t -> Line.t
     val texts: t -> Text.t Deque.t
     val groups: t -> group Deque.t
 end
@@ -58,8 +64,7 @@ val line_indent: t -> int
 val advance_position: int -> t -> t
 
 val newline: t -> t
-val newline_with_indent: int -> t -> t
-val set_next_indent: int -> t -> t
+val newline_with_line: Line.t -> t -> t
 
 val fits: int -> t -> bool
 val buffer_fits: t -> bool
@@ -80,3 +85,5 @@ val enter_group: t -> t
 val leave_group: t -> t
 
 val increment_indent: int -> t -> t
+val width: int -> t -> int * t
+val ribbon: int -> t -> int * t

@@ -16,9 +16,13 @@ val break: string -> doc
 val space: doc
 val cut: doc
 val nest: int -> doc -> doc
+val with_width: int -> doc -> doc
+val with_ribbon: int -> doc -> doc
 val group: doc -> doc
 val (<+>): doc -> doc -> doc
 val chain: doc list -> doc
 val separated_by: doc -> doc list -> doc
 val pack: string -> doc list -> doc
+val stack: string -> doc list -> doc
+val stack_or_pack: string -> doc list -> doc
 val wrap_words: string -> doc
