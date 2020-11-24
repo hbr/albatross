@@ -112,9 +112,6 @@ struct
         assert (0 <= l.indent + i);
         {l with indent = l.indent + i}
 
-    let set_width_ribbon (width: int) (ribbon: int) (l: t): t =
-        {l with width; ribbon}
-
     let set_width (width: int) (l: t): t =
         {l with width}
 
