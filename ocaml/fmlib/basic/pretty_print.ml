@@ -61,6 +61,11 @@ end
 include Readable
 
 
+let string_of (r: t): string =
+    let module From =
+        String.From_readable (Readable)
+    in
+    From.make r
 
 
 
@@ -392,11 +397,14 @@ let rec put_line (str: string) (): unit m =
 type doc = unit m
 
 
-let layout (width: int) (ribbon: int) (doc: doc): t =
+let layout_with_ribbon (width: int) (ribbon: int) (doc: doc): t =
     (doc >>= flush_flatten)
         (State.init width ribbon)
         (fun () _ -> Done)
 
+
+let layout (width: int) (doc: doc): t =
+    layout_with_ribbon width width doc
 
 
 let empty: doc =
@@ -450,12 +458,12 @@ let (<+>) (doc1: doc) (doc2: doc): doc =
     doc1 >>= fun () -> doc2
 
 
-let rec chain (lst: doc list): doc =
+let rec cat (lst: doc list): doc =
     match lst with
     | [] ->
         empty
     | hd :: tl ->
-        hd >>= fun () -> chain tl
+        hd >>= fun () -> cat tl
 
 
 let rec separated_by (sep: doc) (lst: doc list): doc =
@@ -589,7 +597,7 @@ let test0
     : bool
     =
     let res =
-        From.make (layout width ribbon doc)
+        string_of (layout_with_ribbon width ribbon doc)
     in
     if print then
         Printf.printf "\n%s\n" res;

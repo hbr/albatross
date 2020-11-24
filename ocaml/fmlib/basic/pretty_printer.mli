@@ -1,3 +1,5 @@
+(** Old pretty printer, deprecated *)
+
 module type PRINTER =
   sig
     type t

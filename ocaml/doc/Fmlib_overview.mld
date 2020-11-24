@@ -24,8 +24,9 @@
   sensitivity and incremental parsing. The incrementality guarantees, that the
   parser can run in any environment including a web browser.
 
-- Pretty printer to output nicely formatted text and error messages (similar to
-  [Stdlib.Format], but fully monadic to run in any environment).
+- {!module: Fmlib.Pretty_print}: A pretty printer to output nicely formatted
+  text and error messages (similar to [Stdlib.Format], but fully monadic to run
+  in any environment).
 
 - Library of basic datastructures allowing functional monadic programming
   ({!Fmlib}).
