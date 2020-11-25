@@ -12,8 +12,6 @@ draft
 tmp
 draft/
 draft.*
-*_old.ml
-*_old.mli
 ./doc/
 .alba
 *.al.json
