@@ -11,19 +11,22 @@
 
     {[
     let doc =
-        text "f" <+> space <+>
-        indent
-            2
-            (stack_or_pack
-                " "
-                [text "a";
-                 text "b";
-                 text "(g" <+> space <+>
-                 indent
-                    2
-                    (stack_or_pack " " [text "c"; text "d"])
-                 <+> text ")";
-                 text "e"])
+        group (
+            text "f" <+> space <+>
+            indent
+                2
+                (stack_or_pack
+                    " "
+                    [text "a";
+                     text "b";
+                     group (
+                         text "(g" <+> space <+>
+                         indent
+                            2
+                            (stack_or_pack " " [text "c"; text "d"])
+                         <+> text ")");
+                     text "e"])
+        )
     ]}
 
     where [text "blabla"] is a document with some unbreakable text, [<+>]
@@ -203,6 +206,12 @@ val group: doc -> doc
 
 (** [doc1 <+> doc2] Concatentate the documents [doc1] and [doc2]. *)
 val (<+>): doc -> doc -> doc
+
+
+(** [doc >> lazy_doc] Concatenate the document [doc] with the lazy document
+    [lazy_doc]. *)
+val (>>): doc -> (unit -> doc) -> doc
+
 
 
 (** [cat list] Concatenate all documents in the [list] of documents. *)
