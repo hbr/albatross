@@ -155,19 +155,24 @@
                 text tree.name
             | _ ->
                 let d =
-                    text tree.name <+> space
-                    <+>
-                    nest
-                        2
-                        (stack_or_pack
-                             " "
-                             (List.map (doc false) tree.children))
-                    |> group
+                    parent_child
+                        " " 2
+                        (text tree.name)
+                        (children tree.children ())
                 in
                 if is_top then
                     d
                 else
                     char '(' <+> d <+> char ')'
+        and children lst () =
+            match lst with
+            | [last] ->
+                doc false last
+            | head :: tail ->
+                doc false head <+> space
+                >> children tail    (* Lazy concatenation!! *)
+            | [] ->
+                assert false (* 'lst' is never empty *)
         in
         doc true tree
     ]}
@@ -194,7 +199,16 @@
       (g c d)
       e
     ]}
+
+
+    Note the usage of the lazy concatentation operator [>>] in the recursive
+    part of the function handling the children. This makes sure that even if the
+    tree structure is hugh, the iteration over it is done only on demand. I.e.
+    recursive calls are made only if the corresponding characters are needed
+    when processing the character stream.
 *)
+
+
 
 
 (** {1 API}*)
@@ -261,8 +275,59 @@ val space: doc
 val cut: doc
 
 
-(** [nest n doc] The document [doc] indented by [n] blanks. *)
+(** [group doc]
+
+    Treat all break hints belonging directly to [doc] consistently.
+    Either print all as newlines or print all with their alternative text.
+
+    This is the basic operation to decide break hints.
+
+    If the whole group and all text which follows until the next break hint
+    after the group fits on a line, then all break hints (directly or
+    indirectly) in the group are flattened i.e. printed with their alternative
+    texts.
+
+    If the whole group does not fit, then all break hints belonging directly to
+    the group are printed as effective newlines. The break hints of inner groups
+    are considered separately.
+*)
+val group: doc -> doc
+
+
+(** [nest n doc]
+
+    The document [doc] indented by [n] blanks.
+
+    This is the basic function to indicate a substructure to the pretty printer.
+    The substructure is indented with respect to the parent document.
+
+    The indentation is valid after each effective line break. It is usually
+    convenient to group the whole substructure and put a break hint before the
+    group and group the parent structure and the substructure. This makes sure
+    that either the parent and the child fit on a line or the child begins on a
+    newline and is indented. See the function [parent_child] below which does
+    exactly that.
+*)
 val nest: int -> doc -> doc
+
+
+
+(** [parent_child hint indent parent child]
+
+    Put the parent and the child in a group and separate them by a break hint
+    with the alternative text [hint]. Furthermore put the child in a separate
+    group.
+
+    Equivalent to
+    {[
+    parent
+    <+> break hint
+    <+> nest indent (group child)
+    |> group
+    ]}
+*)
+val parent_child: string -> int -> doc -> doc -> doc
+
 
 
 (** [with_width n doc] Format the document [doc] with line [width].*)
@@ -271,11 +336,6 @@ val with_width: int -> doc -> doc
 
 (** [with_ribbon n doc] Format the document [doc] with [ribbon] width.*)
 val with_ribbon: int -> doc -> doc
-
-
-(** [group doc] Treat all break hints belonging directly to [doc] consistently.
-    Either print all as newlines or print all with their alternative text. *)
-val group: doc -> doc
 
 
 (** [doc1 <+> doc2] Concatentate the documents [doc1] and [doc2]. *)
@@ -307,7 +367,7 @@ val pack: string -> doc list -> doc
 val stack: string -> doc list -> doc
 
 (** [stack_or_pack str list]
-    Separated all documents of the [list] by a break hint with alternative text
+    Separate all documents of the [list] by a break hint with alternative text
     [str] and either print all break hints as newlines of with the alternative
     text [str]. *)
 val stack_or_pack: string -> doc list -> doc

@@ -485,12 +485,33 @@ let rec separated_by (sep: doc) (lst: doc list): doc =
 
 
 
+let group (doc: doc): doc =
+    update State.enter_group
+    <+>
+    doc
+    <+>
+    update State.leave_group
+
+
 let nest (n: int) (doc: doc): doc =
     update (State.increment_indent n)
     <+>
     doc
     <+>
     update (State.increment_indent (-n))
+
+
+let parent_child
+        (hint: string) (indent: int)
+        (parent: doc)
+        (child: doc)
+    : doc
+    =
+    group (
+        parent
+        <+> break hint
+        <+> nest indent (group child))
+
 
 
 let with_width (n: int) (doc: doc): doc =
@@ -507,14 +528,6 @@ let with_ribbon (n: int) (doc: doc): doc =
     doc
     >>= fun () ->
     update_and_ignore (State.ribbon old_ribbon)
-
-
-let group (doc: doc): doc =
-    update State.enter_group
-    <+>
-    doc
-    <+>
-    update State.leave_group
 
 
 
@@ -759,19 +772,25 @@ let doc_tree (tree: tree): doc =
             text tree.name
         | _ ->
             let d =
-                text tree.name <+> space
-                <+>
-                nest
-                    2
-                    (stack_or_pack
-                         " "
-                         (List.map (doc false) tree.children))
-                |> group
+                parent_child
+                    " " 2
+                    (text tree.name)
+                    (children tree.children ())
             in
             if is_top then
                 d
             else
                 char '(' <+> d <+> char ')'
+    and children lst () =
+        match lst with
+        | [last] ->
+            doc false last
+        | head :: tail ->
+            doc false head
+            <+> space
+            >> children tail
+        | [] ->
+            assert false (* [lst] is never empty *)
     in
     doc true tree
 
