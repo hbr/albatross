@@ -103,6 +103,13 @@ let (>=>) (f: 'a -> 'b m) (g: 'b -> 'c m): 'a -> 'c m =
         (fun b s -> g b s k)
 
 
+let (>>) (m: unit m) (f: unit -> unit m): unit m =
+    fun s k ->
+    m
+        s
+        (fun () s -> f () s k)
+
+
 let update (f: State.t -> State.t): unit m =
     fun s k ->
     k () (f s)
@@ -265,10 +272,10 @@ let flush_flatten (): unit m =
         | Some (group, buffer) ->
             flush_flatten_group group ()
             >>= flush buffer
-            >>= fun () ->
-            update State.flatten_done
     in
     flush buffer ()
+    >>= fun () ->
+    update State.flatten_done
 
 
 
