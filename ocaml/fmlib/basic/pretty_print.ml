@@ -767,13 +767,12 @@ let doc_tree (tree: tree): doc =
                     (stack_or_pack
                          " "
                          (List.map (doc false) tree.children))
+                |> group
             in
-            group (
-                if is_top then
-                    d
-                else
-                    char '(' <+> d <+> char ')'
-            )
+            if is_top then
+                d
+            else
+                char '(' <+> d <+> char ')'
     in
     doc true tree
 

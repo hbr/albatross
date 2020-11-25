@@ -123,6 +123,80 @@
  *)
 
 
+
+
+
+(** {1 Generate Documents}
+
+    Clearly, it is tedious to write documents by hand. Usually you have some
+    tree like structure and you want to generate a document from the tree
+    structure.
+
+    Let's assume you have a tree structure like
+
+    {[
+    type tree =
+        { name: string; children: tree list; }
+
+    let leaf (name: string): tree =
+        {name; children = [] }
+
+    let tree (name: string) (children: tree list): tree =
+        {name; children}
+    ]}
+
+    Write a function which converts the tree structure to a document.
+
+    {[
+    let doc_of_tree (tree: tree): doc =
+        let rec doc is_top tree =
+            match tree.children with
+            | [] ->
+                text tree.name
+            | _ ->
+                let d =
+                    text tree.name <+> space
+                    <+>
+                    nest
+                        2
+                        (stack_or_pack
+                             " "
+                             (List.map (doc false) tree.children))
+                    |> group
+                in
+                if is_top then
+                    d
+                else
+                    char '(' <+> d <+> char ')'
+        in
+        doc true tree
+    ]}
+
+    Then the simple command
+
+    {[
+    tree
+        "f"
+        [leaf "a";
+         leaf "b";
+         tree "g" [leaf "c"; leaf "d"];
+         leaf "e"]
+    |> layout 10
+    ]}
+
+    generates the character stream
+
+    {[
+    123456789012345
+    f
+      a
+      b
+      (g c d)
+      e
+    ]}
+*)
+
+
 (** {1 API}*)
 
 (** A readable character stream. *)
