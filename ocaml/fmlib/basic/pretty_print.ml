@@ -268,14 +268,13 @@ let flush_flatten (): unit m =
     let rec flush buffer () =
         match Buffer.pop buffer with
         | None ->
-            return ()
+            update State.flatten_done
+
         | Some (group, buffer) ->
             flush_flatten_group group ()
             >>= flush buffer
     in
     flush buffer ()
-    >>= fun () ->
-    update State.flatten_done
 
 
 
