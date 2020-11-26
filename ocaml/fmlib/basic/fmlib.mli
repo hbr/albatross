@@ -57,30 +57,29 @@ val identity: 'a -> 'a
 module Module_types  = Module_types
 
 
+module Array = Array
+
 module List = List
 
 module Deque = Deque
 
-module Option = Option
-
-module Result = Result
-
 module Finite_map = Finite_map
-
-module Red_black = Red_black
-
-module Sequence = Sequence
-
-module Readable_printer = Readable_printer
 
 module Monad = Monad
 
+module Option = Option
 
-
-module Array = Array
-module Vector = Vector
 module Pool = Pool
 
+module Red_black = Red_black
+
+module Readable_printer = Readable_printer
+
+module Result = Result
+
+module Sequence = Sequence
+
+module Vector = Vector
 
 
 module Common = Common
