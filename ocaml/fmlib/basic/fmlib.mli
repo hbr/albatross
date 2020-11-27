@@ -47,15 +47,25 @@ module Web_application = Web_application
 
 
 
-(** {1 Basic Functions and Data Types} *)
+(** {1 Basic Functions} *)
 
 
 val identity: 'a -> 'a
 (** Identity function *)
 
 
+
+
+
+(** {1 Module Types} *)
+
 module Module_types  = Module_types
 
+
+
+
+
+(** {1 Standard Data Types} *)
 
 module Array = Array
 
