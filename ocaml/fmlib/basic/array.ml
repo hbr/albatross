@@ -91,7 +91,7 @@ let foldi_right (f: int -> 'a -> 'b -> 'b) (arr: 'a array) (b: 'b): 'b =
 
 
 
-module Monadic (M: MONAD) =
+module Monadic (M: MONAD0) =
 struct
     let mapi
         (f: int -> 'a -> 'b M.t)

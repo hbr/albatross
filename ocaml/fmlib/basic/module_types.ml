@@ -29,6 +29,15 @@ module type APPLICATIVE =
   end
 
 
+module type MONAD0 =
+sig
+    type _ t
+    val return: 'a -> 'a t
+    val (>>=):  'a t -> ('a -> 'b t) -> 'b t
+end
+
+
+
 module type MONAD =
   sig
     type 'a t

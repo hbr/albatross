@@ -33,7 +33,7 @@ val fill: int -> 'a -> 'a array -> 'a array
 
 
 
-module Monadic (M: MONAD):
+module Monadic (M: MONAD0):
 sig
     val mapi: (int -> 'a -> 'b M.t) -> 'a array -> 'b array M.t
 

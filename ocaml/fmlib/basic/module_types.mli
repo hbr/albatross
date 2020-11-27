@@ -61,6 +61,15 @@ module type APPLICATIVE =
   end
 
 
+(** A minimal monad signature. *)
+module type MONAD0 =
+sig
+    type _ t
+    val return: 'a -> 'a t
+    val (>>=):  'a t -> ('a -> 'b t) -> 'b t
+end
+
+
 
 (** A monad is an applicative functor with a bind [>>=] operator. *)
 module type MONAD =
