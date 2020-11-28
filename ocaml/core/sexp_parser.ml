@@ -331,6 +331,10 @@ struct
         : p
         =
         run (p |. expect_end) c src
+
+    (* avoid warnings *)
+    let _ = run_string
+    let _ = declarations
 end
 
 
@@ -344,7 +348,7 @@ end
 (* Unit tests *)
 (* --------------------------------------------------------------------- *)
 
-
+(*
 module Expression_parser =
 struct
     include Make (struct type t = builder end)
@@ -561,6 +565,8 @@ let%test _ =
         true
     | _ ->
         false
+
+*)
 
 
 

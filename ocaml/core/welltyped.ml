@@ -1,3 +1,14 @@
+(* Status: Very Draft
+
+   New attempt to term building.
+*)
+
+
+
+
+
+
+
 (** Construction of wellformed contexts and welltyped terms. *)
 
 open Fmlib

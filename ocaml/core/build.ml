@@ -1,3 +1,20 @@
+(* Status: Very Draft
+
+   A first attempt to do term building with the sexp_parser.
+
+   Used in 'Welltyped'.
+*)
+
+
+
+
+
+
+
+
+
+
+
 (** A core internal module to support term building. Do not use outside of core
     directly.
 
