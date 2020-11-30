@@ -348,7 +348,7 @@ end
 (* Unit tests *)
 (* --------------------------------------------------------------------- *)
 
-(*
+
 module Expression_parser =
 struct
     include Make (struct type t = builder end)
@@ -434,7 +434,7 @@ let _ = build_context
 
 
 
-let is_term_ok (src: string): bool =
+let is_term_ok (print: bool) (src: string): bool =
     let module PP = Pretty_printer.Pretty (String_printer) in
     let to_string (pp: PP.t): string =
         String_printer.run (PP.run 0 70 70 pp)
@@ -444,7 +444,8 @@ let is_term_ok (src: string): bool =
     with
     | Ok jm ->
         let module Print = Welltyped.Print (PP) in
-        Printf.printf "%s\n" (to_string (Print.judgement jm));
+        if print then
+            Printf.printf "%s\n" (to_string (Print.judgement jm));
         true
     | Error (range, error) ->
         let module Print = Type_error.Print (PP) in
@@ -457,34 +458,35 @@ let is_term_ok (src: string): bool =
 
 (* Some simple expressions *)
 let%test _ =
-    is_term_ok "Any"
+    is_term_ok false "Any"
 
 
 let%test _ =
-    is_term_ok "Proposition"
-
-
-
-let%test _ =
-    is_term_ok "(all (A:Any) (a:A): A)"
-
+    is_term_ok false "Proposition"
 
 
 
 let%test _ =
-    is_term_ok "(all (a:Proposition): Proposition)"
+    is_term_ok false "(all (A:Any) (a:A): A)"
+
+
 
 
 let%test _ =
-    is_term_ok "(all (a:Proposition)(x:a): a)"
+    is_term_ok false "(all (a:Proposition): Proposition)"
 
 
 let%test _ =
-    is_term_ok "(all (A:Any) (x:A) (a:Proposition): a)"
+    is_term_ok false "(all (a:Proposition)(x:a): a)"
+
+
+let%test _ =
+    is_term_ok false "(all (A:Any) (x:A) (a:Proposition): a)"
 
 
 let%test _ =
     is_term_ok
+        false
         "(all (A: Any) \
          \n  (F: (all (y: A): Any))\
          \n  (a: A)\
@@ -566,7 +568,7 @@ let%test _ =
     | _ ->
         false
 
-*)
+
 
 
 
