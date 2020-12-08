@@ -1,4 +1,5 @@
 module Sort = Sort
+module Value = Value
 module Term = Term
 module Inductive = Inductive
 module Operator = Operator

@@ -41,11 +41,18 @@ fmlib_js:
 fmlib_node:
 	dune build ocaml/fmlib/node/fmlib_node.cma
 
+
 core: fmlib
 	dune build @ocaml/core/runtest
 
+
+elaboration: fmlib core
+	dune build @ocaml/elaboration/runtest
+
+
 albalib: core
 	dune build @ocaml/albalib/runtest
+
 
 alba2: albalib
 	dune build ocaml/alba2/alba2.bc
