@@ -5,7 +5,8 @@ open Module_types
 
 type ('a, 'e) t = ('a, 'e) result
 
-val (>>=): ('a, 'e) t -> ('a -> ('b, 'e) t) -> ('b, 'e) t
+val (>>=):    ('a, 'e) t -> ('a -> ('b, 'e) t) -> ('b, 'e) t
+val ( let* ): ('a, 'e) t -> ('a -> ('b, 'e) t) -> ('b, 'e) t
 
 
 val map: ('a -> 'b) -> ('a, 'e) t -> ('b, 'e) t
@@ -32,7 +33,8 @@ sig
 
     val return: 'a -> 'a t
 
-    val (>>=): 'a t -> ('a -> 'b t) -> 'b t
+    val (>>=):    'a t -> ('a -> 'b t) -> 'b t
+    val ( let* ): 'a t -> ('a -> 'b t) -> 'b t
 
     val (>=>): ('a -> 'b t) -> ('b -> 'c t) -> 'a -> 'c t
 

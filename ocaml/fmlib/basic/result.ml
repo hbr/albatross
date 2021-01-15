@@ -16,6 +16,8 @@ let (>>=)
     | Error e ->
         Error e
 
+let ( let* ) = (>>=)
+
 
 
 let map (f: 'a -> 'b) (m: ('a, 'e) t): ('b, 'e) t =
@@ -64,6 +66,8 @@ struct
                 let (>>=) = (>>=)
             end
         )
+
+    let ( let* ) = (>>=)
 
     let throw = throw
 
