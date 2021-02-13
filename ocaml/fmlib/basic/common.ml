@@ -163,7 +163,7 @@ module String =
             and capacity = ref increment
             in
             let make_room () =
-                if len = capacity then
+                if !len = !capacity then
                     let bnew = Bytes.create (!capacity + increment) in
                     begin
                         Bytes.blit !buffer 0 bnew 0 !len;
