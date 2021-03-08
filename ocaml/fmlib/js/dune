@@ -2,7 +2,7 @@
     (libraries
         fmlib
         js_of_ocaml
-        js_of_ocaml-ppx)
+    )
     ;(js_of_ocaml
     ;    (flags (--disable genprim
     ;            --disable=debugger)))

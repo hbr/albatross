@@ -1,5 +1,5 @@
 (library
-  (libraries fmlib js_of_ocaml js_of_ocaml-ppx)
+  (libraries fmlib js_of_ocaml)
   (js_of_ocaml
       (flags (--disable genprim
               --disable=debugger)))
